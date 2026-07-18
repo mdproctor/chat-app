@@ -1,7 +1,8 @@
 import type {
   QhorusMessage, QhorusChannel, Reaction, ChannelMember, PresenceState,
-  MessageType, ActorType,
+  MessageType, ActorType, ArtefactRef, CommitmentState,
 } from '@casehubio/blocks-ui-channel-activity';
+import type { CommitmentRecord } from '../types.js';
 
 interface WsOp {
   op: 'snapshot' | 'append' | 'replace' | 'remove';
@@ -19,6 +20,7 @@ export class ChatDemoAdapter {
   reactions: Reaction[] = [];
   members: ChannelMember[] = [];
   presence: PresenceState[] = [];
+  commitments: Map<string, CommitmentRecord> = new Map();
 
   private _listeners: ChangeListener[] = [];
 
@@ -33,6 +35,7 @@ export class ChatDemoAdapter {
       case 'reactions': this._applyReactions(op); break;
       case 'members': this._applyMembers(op); break;
       case 'presence': this._applyPresence(op); break;
+      case 'commitments': this._applyCommitments(op); break;
     }
     this._notify(op.dataset);
   }
@@ -82,6 +85,11 @@ export class ChatDemoAdapter {
   }
 
   private _toMessage(row: unknown[]): QhorusMessage {
+    let artefactRefs: ArtefactRef[] = [];
+    try {
+      const refsStr = row[10] as string;
+      if (refsStr && refsStr !== '[]') artefactRefs = JSON.parse(refsStr);
+    } catch (_e) { /* ignore parse errors */ }
     return {
       id: row[1] as string,
       channelId: row[0] as string,
@@ -90,10 +98,11 @@ export class ChatDemoAdapter {
       actorType: (row[7] as string as ActorType) || 'HUMAN',
       content: row[4] as string,
       topic: (row[8] as string) || 'General',
-      correlationId: undefined,
+      correlationId: (row[9] as string) || undefined,
       inReplyTo: (row[2] as string) || undefined,
       replyCount: 0,
-      artefactRefs: [],
+      artefactRefs,
+      target: (row[11] as string) || undefined,
       createdAt: row[5] as string,
     };
   }
@@ -163,6 +172,41 @@ export class ChatDemoAdapter {
           ? { ...p, status: op.row![1] as PresenceState['status'], lastSeenAt: (op.row![2] as string) || undefined }
           : p
       );
+    }
+  }
+
+  private _applyCommitments(op: WsOp) {
+    if (op.op === 'snapshot') {
+      this.commitments = new Map();
+      for (const r of op.rows ?? []) {
+        this.commitments.set(r[0] as string, {
+          state: r[2] as CommitmentState,
+          deadline: (r[3] as string) || undefined,
+          acknowledgedAt: (r[4] as string) || undefined,
+          createdAt: r[5] as string,
+          updatedAt: r[6] as string,
+        });
+      }
+    } else if (op.op === 'replace' && op.row) {
+      this.commitments = new Map(this.commitments);
+      this.commitments.set(op.row[0] as string, {
+        state: op.row[2] as CommitmentState,
+        deadline: (op.row[3] as string) || undefined,
+        acknowledgedAt: (op.row[4] as string) || undefined,
+        createdAt: op.row[5] as string,
+        updatedAt: op.row[6] as string,
+      });
+    } else if (op.op === 'append' && op.rows) {
+      this.commitments = new Map(this.commitments);
+      for (const r of op.rows) {
+        this.commitments.set(r[0] as string, {
+          state: r[2] as CommitmentState,
+          deadline: (r[3] as string) || undefined,
+          acknowledgedAt: (r[4] as string) || undefined,
+          createdAt: r[5] as string,
+          updatedAt: r[6] as string,
+        });
+      }
     }
   }
 }

@@ -10,13 +10,21 @@ import {
   ChannelMemberPanelElement,
   ChannelInputElement,
 } from '@casehubio/blocks-ui-channel-activity';
-import type { SendMessagePayload, ReactPayload, CreateChannelPayload } from '@casehubio/blocks-ui-channel-activity';
+import type { SendMessagePayload, ReactPayload, CreateChannelPayload, ArtefactRef } from '@casehubio/blocks-ui-channel-activity';
 import type { QhorusMessage, QhorusChannel, Reaction, ChannelMember, PresenceState } from '@casehubio/blocks-ui-channel-activity';
+import type { DockItem, LayoutState } from '@casehubio/pages-component';
+import { createLocalLayoutStore } from '@casehubio/pages-runtime';
 import { getToken, getIdentity, authenticatedFetch } from '../auth.js';
 import { injectTheme, applyThemeMode, DEFAULT_THEME } from '@casehubio/pages-ui-tokens';
+import type { CommitmentRecord } from '../types.js';
+import { ARTEFACT_SELECTED } from '../types.js';
 import '../identity-widget.js';
+import { QhorusTaskPanelElement } from '../panels/qhorus-task-panel.js';
+import { QhorusCorrelationPanelElement } from '../panels/qhorus-correlation-panel.js';
+import { QhorusArtifactPanelElement } from '../panels/qhorus-artifact-panel.js';
 
 void ChannelFeedElement; void ChannelNavElement; void ChannelMemberPanelElement; void ChannelInputElement;
+void QhorusTaskPanelElement; void QhorusCorrelationPanelElement; void QhorusArtifactPanelElement;
 
 type LayoutMode = 'desktop' | 'tablet' | 'phone';
 
@@ -34,20 +42,30 @@ export class QhorusWorkbenchElement extends LitElement {
   @state() private _selectedChannelId = '';
   @state() private _replyTo?: { messageId: string; senderName: string };
 
-  @state() private _navVisible = true;
-  @state() private _memberVisible = true;
+  @state() private _dockState: Record<string, boolean> = { nav: true, members: true, tasks: false, correlation: false, artifacts: false };
   @state() private _mode: LayoutMode = 'desktop';
-  @state() private _tabletTab: 'channels' | 'members' = 'channels';
-  @state() private _drawerOpen: 'channel' | 'member' | null = null;
+  @state() private _tabletTab: string = 'nav';
+  @state() private _drawerOpen: string | null = null;
   @state() private _darkMode = false;
+  @state() private _commitments: Map<string, CommitmentRecord> = new Map();
+  @state() private _selectedMessageId?: string;
+  @state() private _selectedArtefactRef?: ArtefactRef;
+
+  private static readonly DOCK_ITEMS: DockItem[] = [
+    { icon: '💬', label: 'Channels', panelId: 'nav', defaultOpen: true },
+    { icon: '👥', label: 'Members', panelId: 'members', defaultOpen: true },
+    { icon: '📋', label: 'Tasks', panelId: 'tasks', defaultOpen: false },
+    { icon: '🔗', label: 'Correlation', panelId: 'correlation', defaultOpen: false },
+    { icon: '📎', label: 'Artifacts', panelId: 'artifacts', defaultOpen: false },
+  ];
 
   private _adapter = new ChatDemoAdapter();
   private _swipeController = new SwipeController(this, {
     drawerQuery: (side) => this.renderRoot?.querySelector(side === 'left' ? '.drawer.left' : '.drawer.right') as HTMLElement | null,
     backdropQuery: () => this.renderRoot?.querySelector('.backdrop') as HTMLElement | null,
-    onOpen: (side) => { if (side === 'left') this._toggleNav(); else this._toggleMember(); },
+    onOpen: (side) => { this._toggleDock(side === 'left' ? 'nav' : 'members'); },
     onClose: () => { this._drawerOpen = null; },
-    isOpenQuery: (side) => side === 'left' ? this._drawerOpen === 'channel' : this._drawerOpen === 'member',
+    isOpenQuery: (side) => side === 'left' ? this._drawerOpen === 'nav' : this._drawerOpen === 'members',
   });
   private _connection = new ConnectionController(this, {
     onMessage: (op) => this._adapter.applyOp(op as any),
@@ -216,13 +234,16 @@ export class QhorusWorkbenchElement extends LitElement {
     super.connectedCallback();
     this._adapter.onChange(this._onDataChange);
     this.addEventListener('pages-event', this._onChatEvent as EventListener);
+    this._setupMediaQueries();
+    this._initTheme();
+  }
+
+  override firstUpdated() {
     const token = getToken();
     if (token && this.endpoint) {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       this._connection.connect(`${proto}//${location.host}${this.endpoint}`, token);
     }
-    this._setupMediaQueries();
-    this._initTheme();
   }
 
   private _initTheme() {
@@ -269,20 +290,22 @@ export class QhorusWorkbenchElement extends LitElement {
     if (prev !== this._mode) this._drawerOpen = null;
   }
 
-  private _toggleNav() {
+  private _toggleDock(panelId: string) {
     if (this._mode === 'phone') {
-      this._drawerOpen = this._drawerOpen === 'channel' ? null : 'channel';
+      this._drawerOpen = this._drawerOpen === panelId ? null : panelId;
+    } else if (this._mode === 'tablet') {
+      if (this._tabletTab === panelId) {
+        this._tabletTab = '';
+      } else {
+        this._tabletTab = panelId;
+      }
     } else {
-      this._navVisible = !this._navVisible;
+      this._dockState = { ...this._dockState, [panelId]: !this._dockState[panelId] };
     }
   }
 
-  private _toggleMember() {
-    if (this._mode === 'phone') {
-      this._drawerOpen = this._drawerOpen === 'member' ? null : 'member';
-    } else {
-      this._memberVisible = !this._memberVisible;
-    }
+  private _isDockOpen(panelId: string): boolean {
+    return !!this._dockState[panelId];
   }
 
   private _closeDrawer() { this._drawerOpen = null; }
@@ -293,6 +316,10 @@ export class QhorusWorkbenchElement extends LitElement {
     this._reactions = this._adapter.reactions;
     this._members = this._adapter.members;
     this._presence = this._adapter.presence;
+    this._commitments = new Map(this._adapter.commitments);
+    if (!this._selectedChannelId && this._channels.length > 0) {
+      this._selectedChannelId = this._channels[0]!.id;
+    }
   };
 
   private _onChatEvent = (e: CustomEvent) => {
@@ -318,12 +345,22 @@ export class QhorusWorkbenchElement extends LitElement {
       case ChannelEventTopics.UNREACT:
         this._removeReaction(payload as ReactPayload);
         break;
-      case ChannelEventTopics.MESSAGE_SELECTED:
+      case ChannelEventTopics.MESSAGE_SELECTED: {
+        const selected = (payload as { message: QhorusMessage }).message;
         this._replyTo = {
-          messageId: (payload as { message: QhorusMessage }).message.id,
-          senderName: (payload as { message: QhorusMessage }).message.sender,
+          messageId: selected.inReplyTo ?? selected.id,
+          senderName: selected.sender,
         };
+        this._selectedMessageId = selected.id;
         break;
+      }
+      case ARTEFACT_SELECTED: {
+        this._selectedArtefactRef = (payload as { artefactRef: ArtefactRef }).artefactRef;
+        if (!this._isDockOpen('artifacts') && this._mode === 'desktop') {
+          this._dockState = { ...this._dockState, artifacts: true };
+        }
+        break;
+      }
     }
   };
 
@@ -332,10 +369,13 @@ export class QhorusWorkbenchElement extends LitElement {
       const url = payload.inReplyTo
         ? `${this.restBase}/channels/${payload.channelId}/messages/${payload.inReplyTo}/replies`
         : `${this.restBase}/channels/${payload.channelId}/messages`;
+      const body: Record<string, unknown> = { text: payload.content };
+      if (payload.speechAct) body.messageType = payload.speechAct;
+      if (payload.artefactRefs?.length) body.artefactRefs = payload.artefactRefs;
       await authenticatedFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: payload.content }),
+        body: JSON.stringify(body),
       });
       this._replyTo = undefined;
     } catch (e) {
@@ -450,6 +490,7 @@ export class QhorusWorkbenchElement extends LitElement {
       <channel-feed
         .messages=${this._filteredMessages()}
         .reactions=${this._filteredReactions()}
+        .eventStyling=${false}
         .channelName=${this._channels.find(c => c.id === this._selectedChannelId)?.name}>
       </channel-feed>
       <channel-input
@@ -462,16 +503,34 @@ export class QhorusWorkbenchElement extends LitElement {
   private _renderDockStrip() {
     return html`
       <div class="dock-strip">
-        <button class="dock-btn ${this._navVisible ? 'active' : ''}"
-          title="Channels" @click=${this._toggleNav}>💬</button>
-        <button class="dock-btn ${this._memberVisible ? 'active' : ''}"
-          title="Members" @click=${this._toggleMember}>👥</button>
+        ${QhorusWorkbenchElement.DOCK_ITEMS.map(item => html`
+          <button class="dock-btn ${this._isDockOpen(item.panelId) ? 'active' : ''}"
+            title=${item.label} @click=${() => this._toggleDock(item.panelId)}>${item.icon}</button>
+        `)}
         <span class="spacer"></span>
         <button class="dock-btn"
           title="${this._darkMode ? 'Light mode' : 'Dark mode'}"
           @click=${this._toggleTheme}>${this._darkMode ? '☀️' : '🌙'}</button>
       </div>
     `;
+  }
+
+  private _renderPanel(panelId: string) {
+    switch (panelId) {
+      case 'nav': return this._renderNav();
+      case 'members': return this._renderMembers();
+      case 'tasks': return html`<qhorus-task-panel
+        .messages=${this._filteredMessages()}
+        .commitments=${this._commitments}
+        .selectedMessageId=${this._selectedMessageId}></qhorus-task-panel>`;
+      case 'correlation': return html`<qhorus-correlation-panel
+        .messages=${this._filteredMessages()}
+        .commitments=${this._commitments}
+        .selectedMessageId=${this._selectedMessageId}></qhorus-correlation-panel>`;
+      case 'artifacts': return html`<qhorus-artifact-panel
+        .selectedArtefactRef=${this._selectedArtefactRef}></qhorus-artifact-panel>`;
+      default: return nothing;
+    }
   }
 
   override render() {
@@ -481,28 +540,37 @@ export class QhorusWorkbenchElement extends LitElement {
   }
 
   private _renderDesktop() {
+    const leftPanels = ['nav', 'tasks'].filter(p => this._isDockOpen(p));
+    const rightPanels = ['members', 'correlation', 'artifacts'].filter(p => this._isDockOpen(p));
     return html`
       ${this._renderDockStrip()}
-      ${this._navVisible ? html`<div class="nav-panel">${this._renderNav()}</div>` : nothing}
+      ${leftPanels.map(p => html`<div class="nav-panel">${this._renderPanel(p)}</div>`)}
       <div class="main-panel">
         ${this._renderChat()}
       </div>
-      ${this._memberVisible ? html`<div class="member-panel">${this._renderMembers()}</div>` : nothing}
+      ${rightPanels.map(p => html`<div class="member-panel">${this._renderPanel(p)}</div>`)}
     `;
   }
 
   private _renderTablet() {
+    const tabItems: { id: string; label: string }[] = [
+      { id: 'nav', label: 'Channels' },
+      { id: 'members', label: 'Members' },
+      { id: 'tasks', label: 'Tasks' },
+      { id: 'correlation', label: 'Correlation' },
+      { id: 'artifacts', label: 'Artifacts' },
+    ];
     return html`
       ${this._renderDockStrip()}
       <div class="sidebar-with-tabs">
         <div class="tab-switcher">
-          <button class=${this._tabletTab === 'channels' ? 'active' : ''}
-            @click=${() => { this._tabletTab = 'channels'; }}>Channels</button>
-          <button class=${this._tabletTab === 'members' ? 'active' : ''}
-            @click=${() => { this._tabletTab = 'members'; }}>Members</button>
+          ${tabItems.map(t => html`
+            <button class=${this._tabletTab === t.id ? 'active' : ''}
+              @click=${() => { this._tabletTab = t.id; }}>${t.label}</button>
+          `)}
         </div>
         <div class="sidebar-content">
-          ${this._tabletTab === 'channels' ? this._renderNav() : this._renderMembers()}
+          ${this._tabletTab ? this._renderPanel(this._tabletTab) : nothing}
         </div>
       </div>
       <div class="main-panel">
@@ -514,19 +582,20 @@ export class QhorusWorkbenchElement extends LitElement {
   private _renderPhone() {
     const channelName = this._channels.find(c => c.id === this._selectedChannelId)?.name;
     return html`
-      <div class="drawer left ${this._drawerOpen === 'channel' ? 'open' : ''}">
+      <div class="drawer left ${this._drawerOpen === 'nav' ? 'open' : ''}">
         ${this._renderNav()}
       </div>
-      <div class="drawer right ${this._drawerOpen === 'member' ? 'open' : ''}">
-        ${this._renderMembers()}
+      <div class="drawer right ${this._drawerOpen && this._drawerOpen !== 'nav' ? 'open' : ''}">
+        ${this._drawerOpen && this._drawerOpen !== 'nav' ? this._renderPanel(this._drawerOpen) : nothing}
       </div>
       <div class="backdrop ${this._drawerOpen ? 'visible' : ''}" @click=${this._closeDrawer}></div>
       <div class="main-panel">
         <div class="phone-header">
-          <button class="dock-btn" title="Channels" @click=${this._toggleNav}>☰</button>
+          <button class="dock-btn" title="Channels" @click=${() => this._toggleDock('nav')}>☰</button>
           ${channelName ? html`<span class="channel-name">#${channelName}</span>` : nothing}
           <span class="spacer"></span>
-          <button class="dock-btn" title="Members" @click=${this._toggleMember}>👥</button>
+          <button class="dock-btn" title="Members" @click=${() => this._toggleDock('members')}>👥</button>
+          <button class="dock-btn" title="More" @click=${() => this._toggleDock('tasks')}>⋯</button>
         </div>
         ${this._renderChat()}
       </div>

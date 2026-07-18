@@ -8,3 +8,5 @@ wksp
 chat-app.db*
 node_modules/
 dist/
+.playwright-mcp/
+src/main/webui/test-results/

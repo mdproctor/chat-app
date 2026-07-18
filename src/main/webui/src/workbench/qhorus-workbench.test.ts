@@ -155,6 +155,64 @@ describe('QhorusWorkbenchElement', () => {
     });
   });
 
+  it('reply to a thread reply targets the thread root, not the reply', async () => {
+    const replyMessage: QhorusMessage = {
+      id: 'reply-1',
+      channelId: 'ch-1',
+      sender: 'bob',
+      messageType: 'EVENT',
+      actorType: 'HUMAN',
+      content: 'A reply',
+      topic: 'General',
+      inReplyTo: 'root-msg-1',
+      replyCount: 0,
+      artefactRefs: [],
+      createdAt: '2026-07-07T12:01:00Z',
+    };
+
+    const event = new CustomEvent('pages-event', {
+      detail: {
+        topic: ChannelEventTopics.MESSAGE_SELECTED,
+        payload: { message: replyMessage },
+      },
+      bubbles: true,
+      composed: true,
+    });
+
+    element.dispatchEvent(event);
+    await element.updateComplete;
+
+    expect(element._replyTo).toEqual({
+      messageId: 'root-msg-1',
+      senderName: 'bob',
+    });
+  });
+
+  it('auto-selects first channel when channels arrive and none selected', async () => {
+    expect(element._selectedChannelId).toBe('');
+
+    element._adapter.channels = [
+      { id: 'ch-1', name: 'general', semantic: 'APPEND', paused: false },
+      { id: 'ch-2', name: 'incidents', semantic: 'APPEND', paused: false },
+    ];
+    element._onDataChange('channels');
+    await element.updateComplete;
+
+    expect(element._selectedChannelId).toBe('ch-1');
+  });
+
+  it('does not override selected channel when channels update', async () => {
+    element._selectedChannelId = 'ch-2';
+    element._adapter.channels = [
+      { id: 'ch-1', name: 'general', semantic: 'APPEND', paused: false },
+      { id: 'ch-2', name: 'incidents', semantic: 'APPEND', paused: false },
+    ];
+    element._onDataChange('channels');
+    await element.updateComplete;
+
+    expect(element._selectedChannelId).toBe('ch-2');
+  });
+
   it('calls authenticatedFetch on SEND_MESSAGE event', async () => {
     const { authenticatedFetch } = await import('../auth.js');
     const fetchMock = vi.mocked(authenticatedFetch);

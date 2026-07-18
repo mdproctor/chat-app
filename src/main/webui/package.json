@@ -7,7 +7,9 @@
     "dev:esbuild": "node esbuild.config.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "npx playwright test",
+    "test:e2e:headed": "npx playwright test --headed"
   },
   "dependencies": {
     "@casehubio/blocks-ui-channel-activity": "file:../../../../blocks-ui/components/channel-activity",
@@ -22,6 +24,7 @@
     "marked": "^15.0.12"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/dompurify": "^3.0.5",
     "@types/node": "^26.1.0",
     "esbuild": "^0.28.1",

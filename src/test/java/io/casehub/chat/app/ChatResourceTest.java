@@ -1,17 +1,17 @@
 package io.casehub.chat.app;
 
-import static io.restassured.RestAssured.given;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.notNullValue;
-
-import java.util.List;
-import java.util.Map;
-
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
+
+import static io.restassured.RestAssured.given;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.notNullValue;
 
 @QuarkusTest
 class ChatResourceTest {
@@ -360,4 +360,74 @@ class ChatResourceTest {
                 .then().statusCode(200)
                 .body("status", is("ONLINE"));
     }
+
+    @Test
+    void postMessage_withEnrichedFields_createsCommitment() {
+        var body = Map.of(
+                "text", "Investigate case-456",
+                "messageType", "COMMAND",
+                "actorType", "AGENT",
+                "target", "agent-b");
+        given().auth().oauth2(token).contentType(ContentType.JSON)
+               .body(body)
+               .post("/api/channels/" + channelId + "/messages")
+               .then().statusCode(200)
+               .body("messageId", notNullValue());
+        given().auth().oauth2(token)
+               .get("/api/channels/" + channelId + "/commitments")
+               .then().statusCode(200)
+               .body("size()", is(1))
+               .body("[0].state", is("OPEN"));
+    }
+
+    @Test
+    void updateCommitmentState_patchEndpoint() {
+        var msgId = given().auth().oauth2(token).contentType(ContentType.JSON)
+                           .body(Map.of("text", "Do this", "messageType", "COMMAND"))
+                           .post("/api/channels/" + channelId + "/messages")
+                           .then().statusCode(200)
+                           .extract().path("messageId");
+        given().auth().oauth2(token).contentType(ContentType.JSON)
+               .body(Map.of("state", "FULFILLED"))
+               .patch("/api/channels/" + channelId + "/commitments/" + msgId)
+               .then().statusCode(200);
+        given().auth().oauth2(token)
+               .get("/api/channels/" + channelId + "/commitments")
+               .then().body("[0].state", is("FULFILLED"));
+    }
+
+    @Test
+    void correlationChain_returnsRelatedMessages() {
+        var cmdId = given().auth().oauth2(token).contentType(ContentType.JSON)
+                           .body(Map.of("text", "Investigate", "messageType", "COMMAND"))
+                           .post("/api/channels/" + channelId + "/messages")
+                           .then().extract().<String>path("messageId");
+        given().auth().oauth2(token).contentType(ContentType.JSON)
+               .body(Map.of("text", "Working on it", "messageType", "STATUS"))
+               .post("/api/channels/" + channelId + "/messages/" + cmdId + "/replies")
+               .then().statusCode(200);
+        given().auth().oauth2(token)
+               .get("/api/channels/" + channelId + "/correlation/" + cmdId)
+               .then().statusCode(200).body("size()", is(2));
+    }
+
+    @Test
+    void replyInheritsCorrelationId() {
+        var cmdId = given().auth().oauth2(token).contentType(ContentType.JSON)
+                           .body(Map.of("text", "Start task", "messageType", "COMMAND"))
+                           .post("/api/channels/" + channelId + "/messages")
+                           .then().extract().<String>path("messageId");
+        var replyId = given().auth().oauth2(token).contentType(ContentType.JSON)
+                             .body(Map.of("text", "Status update", "messageType", "STATUS"))
+                             .post("/api/channels/" + channelId + "/messages/" + cmdId + "/replies")
+                             .then().extract().<String>path("messageId");
+        var chainReplyId = given().auth().oauth2(token).contentType(ContentType.JSON)
+                                  .body(Map.of("text", "Done", "messageType", "DONE"))
+                                  .post("/api/channels/" + channelId + "/messages/" + replyId + "/replies")
+                                  .then().extract().<String>path("messageId");
+        given().auth().oauth2(token)
+               .get("/api/channels/" + channelId + "/correlation/" + cmdId)
+               .then().statusCode(200).body("size()", is(3));
+    }
+
 }

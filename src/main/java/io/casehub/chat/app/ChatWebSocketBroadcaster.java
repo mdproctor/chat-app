@@ -1,5 +1,18 @@
 package io.casehub.chat.app;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.casehub.connectors.chat.model.Channel;
+import io.casehub.connectors.chat.model.Member;
+import io.casehub.connectors.chat.model.MemberRef;
+import io.casehub.connectors.chat.model.PresenceStatus;
+import io.casehub.connectors.chat.model.ReceivedMessage;
+import io.casehub.connectors.chat.spi.ChatPlatform;
+import io.quarkus.logging.Log;
+import io.quarkus.websockets.next.WebSocketConnection;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -7,27 +20,8 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicLong;
 
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.quarkus.logging.Log;
-import io.quarkus.websockets.next.WebSocketConnection;
-
-import io.casehub.connectors.chat.model.Channel;
-import io.casehub.connectors.chat.model.Member;
-import io.casehub.connectors.chat.model.MemberRef;
-import io.casehub.connectors.chat.model.PresenceStatus;
-import io.casehub.connectors.chat.model.ReceivedMessage;
-import io.casehub.connectors.chat.spi.ChatPlatform;
-
 @ApplicationScoped
 public class ChatWebSocketBroadcaster {
-
-    private final Set<WebSocketConnection> connections = new CopyOnWriteArraySet<>();
-    private final AtomicLong seq = new AtomicLong(0);
 
     // Column definitions
     private static final List<Map<String, Object>> CHANNEL_COLUMNS = List.of(
@@ -36,31 +30,42 @@ public class ChatWebSocketBroadcaster {
             Map.of("id", "topic", "name", "Topic", "type", "LABEL"),
             Map.of("id", "description", "name", "Description", "type", "LABEL"),
             Map.of("id", "isPrivate", "name", "Private", "type", "LABEL"));
-
     private static final List<Map<String, Object>> MESSAGE_COLUMNS = List.of(
             Map.of("id", "channelId", "name", "Channel", "type", "LABEL"),
             Map.of("id", "messageId", "name", "Message ID", "type", "LABEL"),
             Map.of("id", "parentId", "name", "Parent", "type", "LABEL"),
             Map.of("id", "senderId", "name", "Sender", "type", "LABEL"),
             Map.of("id", "text", "name", "Text", "type", "LABEL"),
-            Map.of("id", "timestamp", "name", "Timestamp", "type", "DATE"));
-
+            Map.of("id", "timestamp", "name", "Timestamp", "type", "DATE"),
+            Map.of("id", "messageType", "name", "Type", "type", "LABEL"),
+            Map.of("id", "actorType", "name", "Actor", "type", "LABEL"),
+            Map.of("id", "topic", "name", "Topic", "type", "LABEL"),
+            Map.of("id", "correlationId", "name", "Correlation", "type", "LABEL"),
+            Map.of("id", "artefactRefs", "name", "Artefacts", "type", "LABEL"),
+            Map.of("id", "target", "name", "Target", "type", "LABEL"));
     private static final List<Map<String, Object>> MEMBER_COLUMNS = List.of(
             Map.of("id", "membershipId", "name", "Membership", "type", "LABEL"),
             Map.of("id", "channelId", "name", "Channel", "type", "LABEL"),
             Map.of("id", "memberId", "name", "Member", "type", "LABEL"),
             Map.of("id", "displayName", "name", "Display Name", "type", "LABEL"),
             Map.of("id", "role", "name", "Role", "type", "LABEL"));
-
     private static final List<Map<String, Object>> PRESENCE_COLUMNS = List.of(
             Map.of("id", "memberId", "name", "Member", "type", "LABEL"),
             Map.of("id", "status", "name", "Status", "type", "LABEL"),
             Map.of("id", "lastActiveAt", "name", "Last Active", "type", "DATE"));
-
-    private static final List<Map<String, Object>> REACTION_COLUMNS = List.of(
+    private static final List<Map<String, Object>> REACTION_COLUMNS   = List.of(
             Map.of("id", "messageId", "name", "Message ID", "type", "LABEL"),
             Map.of("id", "emoji", "name", "Emoji", "type", "LABEL"));
-
+    private static final List<Map<String, Object>> COMMITMENT_COLUMNS = List.of(
+            Map.of("id", "commitmentId", "name", "ID", "type", "LABEL"),
+            Map.of("id", "channelId", "name", "Channel", "type", "LABEL"),
+            Map.of("id", "state", "name", "State", "type", "LABEL"),
+            Map.of("id", "deadline", "name", "Deadline", "type", "DATE"),
+            Map.of("id", "acknowledgedAt", "name", "Acknowledged", "type", "DATE"),
+            Map.of("id", "createdAt", "name", "Created", "type", "DATE"),
+            Map.of("id", "updatedAt", "name", "Updated", "type", "DATE"));
+    private final Set<WebSocketConnection> connections = new CopyOnWriteArraySet<>();
+    private final AtomicLong               seq         = new AtomicLong(0);
     @Inject
     ObjectMapper objectMapper;
 
@@ -83,13 +88,13 @@ public class ChatWebSocketBroadcaster {
 
         // Channels dataset
         final var channelRows = channels.stream()
-                .map(ch -> List.of(
-                        ch.ref().id(),
-                        ch.name(),
-                        ch.topic(),
-                        ch.description(),
-                        String.valueOf(ch.isPrivate())))
-                .toList();
+                                        .map(ch -> List.of(
+                                                ch.ref().id(),
+                                                ch.name(),
+                                                ch.topic() != null ? ch.topic() : "",
+                                                ch.description() != null ? ch.description() : "",
+                                                String.valueOf(ch.isPrivate())))
+                                        .toList();
 
         // Messages dataset
         final var messages = new java.util.ArrayList<List<Object>>();
@@ -104,7 +109,7 @@ public class ChatWebSocketBroadcaster {
         for (final Channel ch : channels) {
             for (final Member m : chatPlatform.members().list(ch.ref())) {
                 final String membershipId = ch.ref().id() + ":" + m.ref().id();
-                final String role = chatBackend.memberRole(ch.ref(), m.ref());
+                final String role         = chatBackend.memberRole(ch.ref(), m.ref());
                 members.add(List.of(membershipId, ch.ref().id(), m.ref().id(), m.displayName(), role));
             }
         }
@@ -127,25 +132,34 @@ public class ChatWebSocketBroadcaster {
             }
         }
         final var presenceRows = uniqueMembers.stream()
-                .map(memberRef -> {
-                    final PresenceStatus status = chatPlatform.presence().of(memberRef);
-                    final java.time.Instant lastActive = chatBackend.lastActiveAt(memberRef);
-                    final String lastActiveStr = lastActive != null ? lastActive.toString() : "";
-                    return List.<Object>of(memberRef.id(), status.name(), lastActiveStr);
-                })
-                .toList();
+                                              .map(memberRef -> {
+                                                  final PresenceStatus    status        = chatPlatform.presence().of(memberRef);
+                                                  final java.time.Instant lastActive    = chatBackend.lastActiveAt(memberRef);
+                                                  final String            lastActiveStr = lastActive != null ? lastActive.toString() : "";
+                                                  return List.<Object>of(memberRef.id(), status.name(), lastActiveStr);
+                                              })
+                                              .toList();
+
+        final var commitmentRows = new java.util.ArrayList<java.util.List<Object>>();
+        for (final Channel ch : channels) {
+            for (final var c : chatBackend.listCommitments(ch.ref().id())) {
+                commitmentRows.add(commitmentToRow(c));
+            }
+        }
 
         return toJson(List.of(
                 Map.of("dataset", "channels", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                        "columns", CHANNEL_COLUMNS, "rows", channelRows),
+                       "columns", CHANNEL_COLUMNS, "rows", channelRows),
                 Map.of("dataset", "messages", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                        "columns", MESSAGE_COLUMNS, "rows", messages),
+                       "columns", MESSAGE_COLUMNS, "rows", messages),
                 Map.of("dataset", "members", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                        "columns", MEMBER_COLUMNS, "rows", members),
+                       "columns", MEMBER_COLUMNS, "rows", members),
                 Map.of("dataset", "presence", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                        "columns", PRESENCE_COLUMNS, "rows", presenceRows),
+                       "columns", PRESENCE_COLUMNS, "rows", presenceRows),
                 Map.of("dataset", "reactions", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                        "columns", REACTION_COLUMNS, "rows", reactions)));
+                       "columns", REACTION_COLUMNS, "rows", reactions),
+                Map.of("dataset", "commitments", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
+                       "columns", COMMITMENT_COLUMNS, "rows", commitmentRows)));
     }
 
     void broadcastMessageAppend(final ReceivedMessage msg) {
@@ -227,6 +241,38 @@ public class ChatWebSocketBroadcaster {
                 "key", channelId));
     }
 
+
+    void broadcastCommitmentAppend(final String commitmentId, final String channelId) {
+        chatBackend.listCommitments(channelId).stream()
+                   .filter(c -> commitmentId.equals(c.get("id")))
+                   .findFirst()
+                   .ifPresent(c -> broadcast(java.util.Map.of(
+                           "dataset", "commitments", "op", "append",
+                           "seq", String.valueOf(seq.incrementAndGet()),
+                           "columns", COMMITMENT_COLUMNS,
+                           "rows", java.util.List.of(commitmentToRow(c)))));
+    }
+
+    void broadcastCommitmentReplace(final String commitmentId, final String channelId) {
+        chatBackend.listCommitments(channelId).stream()
+                   .filter(c -> commitmentId.equals(c.get("id")))
+                   .findFirst()
+                   .ifPresent(c -> broadcast(java.util.Map.of(
+                           "dataset", "commitments", "op", "replace",
+                           "seq", String.valueOf(seq.incrementAndGet()),
+                           "columns", COMMITMENT_COLUMNS,
+                           "key", commitmentId,
+                           "row", commitmentToRow(c))));
+    }
+
+    private java.util.List<Object> commitmentToRow(final java.util.Map<String, Object> c) {
+        return java.util.List.of(
+                c.get("id"), c.get("channel_id"), c.get("state"),
+                c.get("deadline") != null ? c.get("deadline") : "",
+                c.get("acknowledged_at") != null ? c.get("acknowledged_at") : "",
+                c.get("created_at"), c.get("updated_at"));
+    }
+
     private void broadcast(final Object event) {
         final String json = toJson(event);
         connections.forEach(c -> c.sendText(json).subscribe().with(
@@ -235,13 +281,20 @@ public class ChatWebSocketBroadcaster {
     }
 
     private List<Object> messageToRow(final ReceivedMessage msg) {
-        final var row = new java.util.ArrayList<Object>(6);
+        final var row = new java.util.ArrayList<Object>(12);
         row.add(msg.channel().id());
         row.add(msg.messageRef().messageId());
         row.add(msg.parentRef() != null ? msg.parentRef().messageId() : null);
         row.add(msg.sender().id());
         row.add(msg.content().text());
         row.add(msg.receivedAt().toString());
+        final var enriched = chatBackend.getEnrichedFields(msg.messageRef().messageId());
+        row.add(enriched.getOrDefault("message_type", "EVENT"));
+        row.add(enriched.getOrDefault("actor_type", "HUMAN"));
+        row.add("General");
+        row.add(enriched.get("correlation_id"));
+        row.add(chatBackend.getArtefactRefsJson(msg.messageRef().messageId()));
+        row.add(enriched.get("target"));
         return row;
     }
 

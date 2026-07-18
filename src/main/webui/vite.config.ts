@@ -7,6 +7,7 @@ const CHANNEL_ACTIVITY = path.resolve(__dirname, '../../../../blocks-ui/componen
 
 export default defineConfig({
   root: 'src',
+  server: { hmr: { overlay: false } },
   resolve: {
     alias: [
       { find: '@casehubio/blocks-ui-channel-activity', replacement: path.resolve(CHANNEL_ACTIVITY, 'src') },

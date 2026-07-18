@@ -319,4 +319,68 @@ describe('ChatDemoAdapter', () => {
     });
     expect(adapter.messages.find(m => m.id === 'msg-1')!.replyCount).toBe(1);
   });
+
+  it('maps correlationId from row index 9', () => {
+    const adapter = new ChatDemoAdapter();
+    adapter.applyOp({
+      op: 'snapshot', dataset: 'messages',
+      rows: [['ch1', 'msg1', null, 'alice', 'hello', '2026-01-01T00:00:00Z',
+              'COMMAND', 'AGENT', 'General', 'msg1', '[]', 'bob']],
+    });
+    expect(adapter.messages[0]!.correlationId).toBe('msg1');
+  });
+
+  it('parses artefactRefs from JSON at row index 10', () => {
+    const adapter = new ChatDemoAdapter();
+    const refs = JSON.stringify([{uri: 'doc.md', type: 'DOCUMENT', label: 'Doc'}]);
+    adapter.applyOp({
+      op: 'snapshot', dataset: 'messages',
+      rows: [['ch1', 'msg1', null, 'alice', 'hello', '2026-01-01T00:00:00Z',
+              'EVENT', 'HUMAN', 'General', null, refs, null]],
+    });
+    expect(adapter.messages[0]!.artefactRefs).toHaveLength(1);
+    expect(adapter.messages[0]!.artefactRefs[0]!.uri).toBe('doc.md');
+  });
+
+  it('maps target from row index 11', () => {
+    const adapter = new ChatDemoAdapter();
+    adapter.applyOp({
+      op: 'snapshot', dataset: 'messages',
+      rows: [['ch1', 'msg1', null, 'alice', 'hello', '2026-01-01T00:00:00Z',
+              'COMMAND', 'AGENT', 'General', 'msg1', '[]', 'bot-b']],
+    });
+    expect(adapter.messages[0]!.target).toBe('bot-b');
+  });
+
+  it('processes commitments dataset snapshot', () => {
+    const adapter = new ChatDemoAdapter();
+    adapter.applyOp({
+      op: 'snapshot', dataset: 'commitments',
+      rows: [['c1', 'ch1', 'OPEN', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z']],
+    });
+    expect(adapter.commitments.get('c1')?.state).toBe('OPEN');
+  });
+
+  it('processes commitments dataset replace', () => {
+    const adapter = new ChatDemoAdapter();
+    adapter.applyOp({
+      op: 'snapshot', dataset: 'commitments',
+      rows: [['c1', 'ch1', 'OPEN', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z']],
+    });
+    adapter.applyOp({
+      op: 'replace', dataset: 'commitments',
+      key: 'c1',
+      row: ['c1', 'ch1', 'FULFILLED', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z'],
+    });
+    expect(adapter.commitments.get('c1')?.state).toBe('FULFILLED');
+  });
+
+  it('processes commitments dataset append', () => {
+    const adapter = new ChatDemoAdapter();
+    adapter.applyOp({
+      op: 'append', dataset: 'commitments',
+      rows: [['c1', 'ch1', 'OPEN', '', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z']],
+    });
+    expect(adapter.commitments.get('c1')?.state).toBe('OPEN');
+  });
 });

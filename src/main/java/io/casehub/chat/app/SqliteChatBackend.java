@@ -30,7 +30,10 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -103,48 +106,76 @@ public class SqliteChatBackend implements ChatBackend {
         try (Connection conn = dataSource.getConnection();
              var stmt = conn.createStatement()) {
             stmt.executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS channels (
-                        id          TEXT PRIMARY KEY,
-                        name        TEXT NOT NULL UNIQUE,
-                        topic       TEXT,
-                        description TEXT,
-                        is_private  INTEGER NOT NULL DEFAULT 0
-                    )""");
+                               CREATE TABLE IF NOT EXISTS channels (
+                                                  id          TEXT PRIMARY KEY,
+                                                  name        TEXT NOT NULL UNIQUE,
+                                                  topic       TEXT,
+                                                  description TEXT,
+                                                  is_private  INTEGER NOT NULL DEFAULT 0
+                                              )""");
             stmt.executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS messages (
-                        id          TEXT PRIMARY KEY,
-                        platform_id TEXT NOT NULL,
-                        channel_id  TEXT NOT NULL,
-                        parent_id   TEXT,
-                        sender_id   TEXT NOT NULL,
-                        content     TEXT NOT NULL,
-                        created_at  TEXT NOT NULL,
-                        FOREIGN KEY (channel_id) REFERENCES channels(id)
-                    )""");
+                               CREATE TABLE IF NOT EXISTS messages (
+                                   id          TEXT PRIMARY KEY,
+                                   platform_id TEXT NOT NULL,
+                                   channel_id  TEXT NOT NULL,
+                                   parent_id   TEXT,
+                                   sender_id   TEXT NOT NULL,
+                                   content     TEXT NOT NULL,
+                                   created_at  TEXT NOT NULL,
+                                   FOREIGN KEY (channel_id) REFERENCES channels(id)
+                               )""");
             stmt.executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS reactions (
-                        message_id  TEXT NOT NULL,
-                        emoji       TEXT NOT NULL,
-                        PRIMARY KEY (message_id, emoji)
-                    )""");
+                               CREATE TABLE IF NOT EXISTS reactions (
+                                   message_id  TEXT NOT NULL,
+                                   emoji       TEXT NOT NULL,
+                                   PRIMARY KEY (message_id, emoji)
+                               )""");
             stmt.executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS presence (
-                        member_id      TEXT PRIMARY KEY,
-                        status         TEXT NOT NULL,
-                        last_active_at TEXT
-                    )""");
+                               CREATE TABLE IF NOT EXISTS presence (
+                                   member_id      TEXT PRIMARY KEY,
+                                   status         TEXT NOT NULL,
+                                   last_active_at TEXT
+                               )""");
             stmt.executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS members (
-                        channel_id   TEXT NOT NULL,
-                        member_id    TEXT NOT NULL,
-                        display_name TEXT,
-                        role         TEXT NOT NULL DEFAULT 'PARTICIPANT',
-                        last_read_at TEXT,
-                        PRIMARY KEY (channel_id, member_id)
-                    )""");
+                               CREATE TABLE IF NOT EXISTS members (
+                                   channel_id   TEXT NOT NULL,
+                                   member_id    TEXT NOT NULL,
+                                   display_name TEXT,
+                                   role         TEXT NOT NULL DEFAULT 'PARTICIPANT',
+                                   last_read_at TEXT,
+                                   PRIMARY KEY (channel_id, member_id)
+                               )""");
+            stmt.executeUpdate("""
+                               CREATE TABLE IF NOT EXISTS commitments (
+                                   id              TEXT PRIMARY KEY,
+                                   channel_id      TEXT NOT NULL,
+                                   state           TEXT NOT NULL DEFAULT 'OPEN',
+                                   deadline        TEXT,
+                                   acknowledged_at TEXT,
+                                   created_at      TEXT NOT NULL,
+                                   updated_at      TEXT NOT NULL,
+                                   FOREIGN KEY (channel_id) REFERENCES channels(id)
+                               )""");
+            stmt.executeUpdate("""
+                               CREATE TABLE IF NOT EXISTS artefact_refs (
+                                   message_id    TEXT NOT NULL,
+                                   uri           TEXT NOT NULL,
+                                   type          TEXT NOT NULL,
+                                   label         TEXT NOT NULL,
+                                   start_line    INTEGER,
+                                   end_line      INTEGER,
+                                   start_offset  INTEGER,
+                                   end_offset    INTEGER,
+                                   selected_text TEXT,
+                                   FOREIGN KEY (message_id) REFERENCES messages(id)
+                               )""");
             addColumnIfMissing(conn, "members", "role", "TEXT NOT NULL DEFAULT 'PARTICIPANT'");
             addColumnIfMissing(conn, "members", "last_read_at", "TEXT");
             addColumnIfMissing(conn, "presence", "last_active_at", "TEXT");
+            addColumnIfMissing(conn, "messages", "message_type", "TEXT NOT NULL DEFAULT 'EVENT'");
+            addColumnIfMissing(conn, "messages", "actor_type", "TEXT NOT NULL DEFAULT 'HUMAN'");
+            addColumnIfMissing(conn, "messages", "correlation_id", "TEXT");
+            addColumnIfMissing(conn, "messages", "target", "TEXT");
         } catch (final SQLException e) {
             throw new RuntimeException("Failed to create SQLite schema", e);
         }
@@ -188,6 +219,17 @@ public class SqliteChatBackend implements ChatBackend {
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
             try {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "DELETE FROM artefact_refs WHERE message_id IN " +
+                        "(SELECT id FROM messages WHERE channel_id = ?)")) {
+                    ps.setString(1, channelId);
+                    ps.executeUpdate();
+                }
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "DELETE FROM commitments WHERE channel_id = ?")) {
+                    ps.setString(1, channelId);
+                    ps.executeUpdate();
+                }
                 try (PreparedStatement ps = conn.prepareStatement(
                         "DELETE FROM reactions WHERE message_id IN " +
                         "(SELECT id FROM messages WHERE channel_id = ?)")) {
@@ -504,6 +546,184 @@ public class SqliteChatBackend implements ChatBackend {
         return null;
     }
 
+
+    public void storeEnrichedFields(final String messageId, final String channelId,
+                                    final String messageType, final String actorType,
+                                    final String correlationId, final String target,
+                                    final String artefactRefsJson) {
+        try (Connection conn = dataSource.getConnection()) {
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "UPDATE messages SET message_type = ?, actor_type = ?, correlation_id = ?, target = ? WHERE id = ?")) {
+                ps.setString(1, messageType != null ? messageType : "EVENT");
+                ps.setString(2, actorType != null ? actorType : "HUMAN");
+                ps.setString(3, correlationId);
+                ps.setString(4, target);
+                ps.setString(5, messageId);
+                ps.executeUpdate();
+            }
+            if (artefactRefsJson != null && !"[]".equals(artefactRefsJson) && !artefactRefsJson.isEmpty()) {
+                storeArtefactRefs(conn, messageId, artefactRefsJson);
+            }
+        } catch (final SQLException e) {
+            throw new RuntimeException("Failed to store enriched fields", e);
+        }
+    }
+
+    private void storeArtefactRefs(final Connection conn, final String messageId, final String json) throws SQLException {
+        try {
+            final var refs = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+            for (final var ref : refs) {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "INSERT INTO artefact_refs (message_id, uri, type, label, start_line, end_line, start_offset, end_offset, selected_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                    ps.setString(1, messageId);
+                    ps.setString(2, ref.get("uri").asText());
+                    ps.setString(3, ref.get("type").asText());
+                    ps.setString(4, ref.get("label").asText());
+                    ps.setObject(5, ref.has("startLine") ? ref.get("startLine").asInt() : null);
+                    ps.setObject(6, ref.has("endLine") ? ref.get("endLine").asInt() : null);
+                    ps.setObject(7, ref.has("startOffset") ? ref.get("startOffset").asInt() : null);
+                    ps.setObject(8, ref.has("endOffset") ? ref.get("endOffset").asInt() : null);
+                    ps.setString(9, ref.has("selectedText") ? ref.get("selectedText").asText() : null);
+                    ps.executeUpdate();
+                }
+            }
+        } catch (final Exception e) {
+            throw new SQLException("Failed to parse artefact refs JSON", e);
+        }
+    }
+
+    public Map<String, Object> getEnrichedFields(final String messageId) {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT message_type, actor_type, correlation_id, target FROM messages WHERE id = ?")) {
+            ps.setString(1, messageId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    final var map = new java.util.HashMap<String, Object>();
+                    map.put("message_type", rs.getString("message_type"));
+                    map.put("actor_type", rs.getString("actor_type"));
+                    map.put("correlation_id", rs.getString("correlation_id"));
+                    map.put("target", rs.getString("target"));
+                    return map;
+                }
+            }
+        } catch (final SQLException e) {
+            throw new RuntimeException("Failed to get enriched fields", e);
+        }
+        return Map.of();
+    }
+
+    public String getArtefactRefsJson(final String messageId) {
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT uri, type, label, start_line, end_line, start_offset, end_offset, selected_text FROM artefact_refs WHERE message_id = ?")) {
+            ps.setString(1, messageId);
+            final var refs = new java.util.ArrayList<Map<String, Object>>();
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    final var ref = new java.util.LinkedHashMap<String, Object>();
+                    ref.put("uri", rs.getString("uri"));
+                    ref.put("type", rs.getString("type"));
+                    ref.put("label", rs.getString("label"));
+                    if (rs.getObject("start_line") != null) {ref.put("startLine", rs.getInt("start_line"));}
+                    if (rs.getObject("end_line") != null) {ref.put("endLine", rs.getInt("end_line"));}
+                    if (rs.getObject("start_offset") != null) {ref.put("startOffset", rs.getInt("start_offset"));}
+                    if (rs.getObject("end_offset") != null) {ref.put("endOffset", rs.getInt("end_offset"));}
+                    if (rs.getString("selected_text") != null) {ref.put("selectedText", rs.getString("selected_text"));}
+                    refs.add(ref);
+                }
+            }
+            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(refs);
+        } catch (final Exception e) {
+            throw new RuntimeException("Failed to get artefact refs", e);
+        }
+    }
+
+    public void createCommitment(final String commitmentId, final String channelId, final String deadline) {
+        final String now = TS_FORMAT.format(Instant.now());
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "INSERT INTO commitments (id, channel_id, state, deadline, created_at, updated_at) VALUES (?, ?, 'OPEN', ?, ?, ?)")) {
+            ps.setString(1, commitmentId);
+            ps.setString(2, channelId);
+            ps.setString(3, deadline);
+            ps.setString(4, now);
+            ps.setString(5, now);
+            ps.executeUpdate();
+        } catch (final SQLException e) {
+            throw new RuntimeException("Failed to create commitment", e);
+        }
+    }
+
+    public void updateCommitmentState(final String commitmentId, final String state, final String acknowledgedAt) {
+        final String now = TS_FORMAT.format(Instant.now());
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE commitments SET state = ?, acknowledged_at = COALESCE(?, acknowledged_at), updated_at = ? WHERE id = ?")) {
+            ps.setString(1, state);
+            ps.setString(2, acknowledgedAt);
+            ps.setString(3, now);
+            ps.setString(4, commitmentId);
+            ps.executeUpdate();
+        } catch (final SQLException e) {
+            throw new RuntimeException("Failed to update commitment state", e);
+        }
+    }
+
+    public List<Map<String, Object>> listCommitments(final String channelId) {
+        final var result = new java.util.ArrayList<Map<String, Object>>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT id, channel_id, state, deadline, acknowledged_at, created_at, updated_at FROM commitments WHERE channel_id = ? ORDER BY created_at")) {
+            ps.setString(1, channelId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    final var row = new java.util.LinkedHashMap<String, Object>();
+                    row.put("id", rs.getString("id"));
+                    row.put("channel_id", rs.getString("channel_id"));
+                    row.put("state", rs.getString("state"));
+                    row.put("deadline", rs.getString("deadline"));
+                    row.put("acknowledged_at", rs.getString("acknowledged_at"));
+                    row.put("created_at", rs.getString("created_at"));
+                    row.put("updated_at", rs.getString("updated_at"));
+                    result.add(row);
+                }
+            }
+        } catch (final SQLException e) {
+            throw new RuntimeException("Failed to list commitments", e);
+        }
+        return result;
+    }
+
+    public List<Map<String, Object>> correlationMessages(final String channelId, final String correlationId) {
+        final var result = new ArrayList<Map<String, Object>>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT id, channel_id, parent_id, sender_id, content, created_at, message_type, actor_type, correlation_id, target " +
+                     "FROM messages WHERE channel_id = ? AND correlation_id = ? ORDER BY created_at")) {
+            ps.setString(1, channelId);
+            ps.setString(2, correlationId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    final var row = new java.util.LinkedHashMap<String, Object>();
+                    row.put("id", rs.getString("id"));
+                    row.put("channelId", rs.getString("channel_id"));
+                    row.put("parentId", rs.getString("parent_id"));
+                    row.put("sender", rs.getString("sender_id"));
+                    row.put("content", rs.getString("content"));
+                    row.put("createdAt", rs.getString("created_at"));
+                    row.put("messageType", rs.getString("message_type"));
+                    row.put("actorType", rs.getString("actor_type"));
+                    row.put("correlationId", rs.getString("correlation_id"));
+                    row.put("target", rs.getString("target"));
+                    result.add(row);
+                }
+            }
+        } catch (final SQLException e) {
+            throw new RuntimeException("Failed to query correlation chain", e);
+        }
+        return result;
+    }
 
     private Channel channelFromRow(final ResultSet rs) throws SQLException {
         return new Channel(
