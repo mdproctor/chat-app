@@ -107,9 +107,9 @@ public class ChatResource {
         } catch (final JsonProcessingException e) {
             throw new RuntimeException(e);
         }
-        final String topicId = chatBackend.getDefaultTopicId(channelId);
+        final String resolvedTopicId = resolveTopicId(channelId, request.topicId(), request.topic());
         chatBackend.storeEnrichedFields(msg.messageRef().messageId(), channelId,
-                                        msgType, actType, correlationId, request.target(), refsJson, topicId);
+                                        msgType, actType, correlationId, request.target(), refsJson, resolvedTopicId);
         if ("COMMAND".equals(msgType)) {
             chatBackend.createCommitment(msg.messageRef().messageId(), channelId, null);
             broadcaster.broadcastCommitmentAppend(msg.messageRef().messageId(), channelId);
@@ -138,6 +138,42 @@ public class ChatResource {
             broadcaster.broadcastPresenceReplace(sender, PresenceStatus.ONLINE);
         }
     }
+
+    private String resolveTopicId(final String channelId, final String topicId, final String topicName) {
+        if (topicId != null && !topicId.isEmpty()) {
+            final var topic = chatBackend.findTopicById(topicId);
+            if (topic.isPresent() && channelId.equals(topic.get().get("channelId"))) {
+                final String state = (String) topic.get().get("state");
+                if ("RESOLVED".equals(state) || "ARCHIVED".equals(state)) {
+                    chatBackend.updateTopic(topicId, null, "ACTIVE");
+                }
+                return topicId;
+            }
+        }
+        if (topicName != null && !topicName.trim().isEmpty()) {
+            final String trimmed  = topicName.trim();
+            final var    existing = chatBackend.findTopicByName(channelId, trimmed);
+            if (existing.isPresent()) {
+                final String existingId = (String) existing.get().get("id");
+                final String state      = (String) existing.get().get("state");
+                if ("RESOLVED".equals(state) || "ARCHIVED".equals(state)) {
+                    chatBackend.updateTopic(existingId, null, "ACTIVE");
+                }
+                return existingId;
+            }
+            try {
+                final var created = chatBackend.createTopic(channelId, trimmed);
+                return (String) created.get("id");
+            } catch (final RuntimeException e) {
+                if (e.getMessage() != null && e.getMessage().contains("UNIQUE constraint")) {
+                    return (String) chatBackend.findTopicByName(channelId, trimmed).get().get("id");
+                }
+                throw e;
+            }
+        }
+        return chatBackend.getDefaultTopicId(channelId);
+    }
+
 
     @GET
     @Path("/channels/{channelId}/messages")
@@ -323,11 +359,95 @@ public class ChatResource {
                                                       @PathParam("correlationId") final String correlationId) {
         return chatBackend.correlationMessages(channelId, correlationId);
     }
+// --- Topics ---
+
+    @POST
+    @Path("/channels/{channelId}/topics")
+    public Response createTopic(@PathParam("channelId") final String channelId,
+                                final CreateTopicRequest request) {
+        final String name = request.name() != null ? request.name().trim() : "";
+        if (name.isEmpty()) {
+            return Response.status(400).entity(Map.of("error", "Topic name must not be empty")).build();
+        }
+        if (name.length() > 100) {
+            return Response.status(400).entity(Map.of("error", "Topic name must be 100 characters or less")).build();
+        }
+        if ("General".equals(name)) {
+            return Response.status(409).entity(Map.of("error", "\"General\" is reserved")).build();
+        }
+        try {
+            final var topic = chatBackend.createTopic(channelId, name);
+            broadcaster.broadcastTopicAppend(channelId);
+            return Response.ok(topic).build();
+        } catch (final RuntimeException e) {
+            if (e.getMessage() != null && e.getMessage().contains("UNIQUE constraint")) {
+                return Response.status(409).entity(Map.of("error", "Topic already exists")).build();
+            }
+            throw e;
+        }
+    }
+
+    @GET
+    @Path("/channels/{channelId}/topics")
+    public List<Map<String, Object>> listTopics(@PathParam("channelId") final String channelId) {
+        return chatBackend.listTopics(channelId);
+    }
+
+    @PUT
+    @Path("/channels/{channelId}/topics/{topicId}")
+    public Response updateTopic(@PathParam("channelId") final String channelId,
+                                @PathParam("topicId") final String topicId,
+                                final UpdateTopicRequest request) {
+        final var existing = chatBackend.findTopicById(topicId);
+        if (existing.isEmpty()) {
+            return Response.status(404).entity(Map.of("error", "Topic not found")).build();
+        }
+        if (request.name() != null) {
+            final String trimmed = request.name().trim();
+            if (trimmed.isEmpty() || trimmed.length() > 100) {
+                return Response.status(400).entity(Map.of("error", "Invalid topic name")).build();
+            }
+        }
+        chatBackend.updateTopic(topicId, request.name(), request.state());
+        broadcaster.broadcastTopicReplace(channelId, topicId);
+        return Response.ok(Map.of("ok", true)).build();
+    }
+
+    @POST
+    @Path("/channels/{channelId}/topics/{topicId}/merge")
+    public Response mergeTopic(@PathParam("channelId") final String channelId,
+                               @PathParam("topicId") final String topicId,
+                               final MergeTopicRequest request) {
+        final var source = chatBackend.findTopicById(topicId);
+        if (source.isEmpty()) {
+            return Response.status(404).entity(Map.of("error", "Source topic not found")).build();
+        }
+        if ("General".equals(source.get().get("name"))) {
+            return Response.status(400).entity(Map.of("error", "Cannot merge the default topic")).build();
+        }
+        final var target = chatBackend.findTopicById(request.targetTopicId());
+        if (target.isEmpty()) {
+            return Response.status(404).entity(Map.of("error", "Target topic not found")).build();
+        }
+        if ("MERGED".equals(target.get().get("state"))) {
+            return Response.status(400).entity(Map.of("error", "Cannot merge into a MERGED topic")).build();
+        }
+        final String targetState = (String) target.get().get("state");
+        if ("RESOLVED".equals(targetState) || "ARCHIVED".equals(targetState)) {
+            chatBackend.updateTopic(request.targetTopicId(), null, "ACTIVE");
+        }
+        chatBackend.mergeTopic(topicId, request.targetTopicId());
+        broadcaster.broadcastTopicRemove(channelId, topicId);
+        broadcaster.broadcastTopicReplace(channelId, request.targetTopicId());
+        return Response.ok(Map.of("ok", true)).build();
+    }
+
 
     public record CreateChannelRequest(String name, String topic, String description, boolean isPrivate) {}
 
     public record PostMessageRequest(String text, String messageType, String actorType,
-                                     String target, List<Map<String, Object>> artefactRefs) {}
+                                     String target, List<Map<String, Object>> artefactRefs,
+                                     String topic, String topicId) {}
 
     public record ReactionRequest(String emoji) {}
 
@@ -336,5 +456,12 @@ public class ChatResource {
     public record SetPresenceRequest(String status) {}
 
     public record UpdateCommitmentRequest(String state, String acknowledgedAt) {}
+
+    public record CreateTopicRequest(String name) {}
+
+    public record UpdateTopicRequest(String name, String state) {}
+
+    public record MergeTopicRequest(String targetTopicId) {}
+
 
 }
