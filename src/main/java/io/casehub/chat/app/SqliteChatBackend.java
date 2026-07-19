@@ -76,6 +76,7 @@ public class SqliteChatBackend implements ChatBackend {
         dataSource = new HikariDataSource(hikari);
 
         createSchema();
+        migrateTopics();
     }
 
     @PreDestroy
@@ -192,6 +193,31 @@ public class SqliteChatBackend implements ChatBackend {
             throw new RuntimeException("Failed to create SQLite schema", e);
         }
     }
+
+    private void migrateTopics() {
+        try (Connection conn = dataSource.getConnection()) {
+            try (var rs = conn.createStatement().executeQuery(
+                    "SELECT id FROM channels WHERE id NOT IN (SELECT DISTINCT channel_id FROM topics)")) {
+                final String now = java.time.Instant.now().toString();
+                while (rs.next()) {
+                    final String channelId = rs.getString("id");
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "INSERT INTO topics (id, channel_id, name, state, created_at, updated_at) VALUES (?, ?, 'General', 'ACTIVE', ?, ?)")) {
+                        ps.setString(1, UUID.randomUUID().toString());
+                        ps.setString(2, channelId);
+                        ps.setString(3, now);
+                        ps.setString(4, now);
+                        ps.executeUpdate();
+                    }
+                }
+            }
+            conn.createStatement().executeUpdate(
+                    "UPDATE messages SET topic_id = (SELECT t.id FROM topics t WHERE t.channel_id = messages.channel_id AND t.name = 'General') WHERE topic_id IS NULL");
+        } catch (final SQLException e) {
+            throw new RuntimeException("Failed to migrate topics", e);
+        }
+    }
+
 
     private void addColumnIfMissing(final Connection conn, final String table, final String column, final String type) {
         try (var rs = conn.createStatement().executeQuery("PRAGMA table_info(" + table + ")")) {
