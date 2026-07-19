@@ -9,9 +9,10 @@ import {
   ChannelNavElement,
   ChannelMemberPanelElement,
   ChannelInputElement,
+  ChannelTopicBarElement,
 } from '@casehubio/blocks-ui-channel-activity';
-import type { SendMessagePayload, ReactPayload, CreateChannelPayload, ArtefactRef } from '@casehubio/blocks-ui-channel-activity';
-import type { QhorusMessage, QhorusChannel, Reaction, ChannelMember, PresenceState } from '@casehubio/blocks-ui-channel-activity';
+import type { SendMessagePayload, ReactPayload, CreateChannelPayload, ArtefactRef, SelectTopicPayload, ViewModePayload, TopicActionPayload, RenameTopicPayload, MergeTopicPayload, CreateTopicPayload } from '@casehubio/blocks-ui-channel-activity';
+import type { QhorusMessage, QhorusChannel, QhorusTopic, Reaction, ChannelMember, PresenceState } from '@casehubio/blocks-ui-channel-activity';
 import type { DockItem, LayoutState } from '@casehubio/pages-component';
 import { createLocalLayoutStore } from '@casehubio/pages-runtime';
 import { getToken, getIdentity, authenticatedFetch } from '../auth.js';
@@ -23,7 +24,7 @@ import { QhorusTaskPanelElement } from '../panels/qhorus-task-panel.js';
 import { QhorusCorrelationPanelElement } from '../panels/qhorus-correlation-panel.js';
 import { QhorusArtifactPanelElement } from '../panels/qhorus-artifact-panel.js';
 
-void ChannelFeedElement; void ChannelNavElement; void ChannelMemberPanelElement; void ChannelInputElement;
+void ChannelFeedElement; void ChannelNavElement; void ChannelMemberPanelElement; void ChannelInputElement; void ChannelTopicBarElement;
 void QhorusTaskPanelElement; void QhorusCorrelationPanelElement; void QhorusArtifactPanelElement;
 
 type LayoutMode = 'desktop' | 'tablet' | 'phone';
@@ -50,6 +51,9 @@ export class QhorusWorkbenchElement extends LitElement {
   @state() private _commitments: Map<string, CommitmentRecord> = new Map();
   @state() private _selectedMessageId?: string;
   @state() private _selectedArtefactRef?: ArtefactRef;
+  @state() private _topics: QhorusTopic[] = [];
+  @state() private _selectedTopicId: string | null = null;
+  @state() private _viewMode: 'flat' | 'threaded' | 'topics' = 'flat';
 
   private static readonly DOCK_ITEMS: DockItem[] = [
     { icon: '💬', label: 'Channels', panelId: 'nav', defaultOpen: true },
@@ -312,6 +316,7 @@ export class QhorusWorkbenchElement extends LitElement {
 
   private _onDataChange = (dataset: string) => {
     this._channels = this._adapter.channels;
+    this._topics = this._adapter.topics;
     this._messages = this._adapter.messages;
     this._reactions = this._adapter.reactions;
     this._members = this._adapter.members;
@@ -328,6 +333,7 @@ export class QhorusWorkbenchElement extends LitElement {
     switch (topic) {
       case ChannelEventTopics.SELECT_CHANNEL:
         this._selectedChannelId = (payload as { channelId: string }).channelId;
+        this._selectedTopicId = null;
         if (this._mode === 'phone') this._drawerOpen = null;
         break;
       case ChannelEventTopics.SEND_MESSAGE:
@@ -361,6 +367,38 @@ export class QhorusWorkbenchElement extends LitElement {
         }
         break;
       }
+      case ChannelEventTopics.SELECT_TOPIC: {
+        const tp = payload as SelectTopicPayload;
+        this._selectedTopicId = tp.topicId;
+        break;
+      }
+      case ChannelEventTopics.VIEW_MODE:
+        this._viewMode = (payload as ViewModePayload).mode;
+        break;
+      case ChannelEventTopics.RESOLVE_TOPIC:
+        this._updateTopicState((payload as TopicActionPayload).channelId, (payload as TopicActionPayload).topicId, 'RESOLVED');
+        break;
+      case ChannelEventTopics.REOPEN_TOPIC:
+        this._updateTopicState((payload as TopicActionPayload).channelId, (payload as TopicActionPayload).topicId, 'ACTIVE');
+        break;
+      case ChannelEventTopics.ARCHIVE_TOPIC:
+        this._updateTopicState((payload as TopicActionPayload).channelId, (payload as TopicActionPayload).topicId, 'ARCHIVED');
+        break;
+      case ChannelEventTopics.RENAME_TOPIC: {
+        const rp = payload as RenameTopicPayload;
+        this._renameTopic(rp.channelId, rp.topicId, rp.newName);
+        break;
+      }
+      case ChannelEventTopics.MERGE_TOPIC: {
+        const mp = payload as MergeTopicPayload;
+        this._mergeTopic(mp.channelId, mp.sourceTopicId, mp.targetTopicId);
+        break;
+      }
+      case ChannelEventTopics.CREATE_TOPIC: {
+        const cp = payload as CreateTopicPayload;
+        this._createTopic(cp.channelId, cp.name);
+        break;
+      }
     }
   };
 
@@ -372,6 +410,8 @@ export class QhorusWorkbenchElement extends LitElement {
       const body: Record<string, unknown> = { text: payload.content };
       if (payload.speechAct) body.messageType = payload.speechAct;
       if (payload.artefactRefs?.length) body.artefactRefs = payload.artefactRefs;
+      if (payload.topicId) body.topicId = payload.topicId;
+      else if (payload.topic) body.topic = payload.topic;
       await authenticatedFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -431,7 +471,48 @@ export class QhorusWorkbenchElement extends LitElement {
 
   private _filteredMessages(): QhorusMessage[] {
     if (!this._selectedChannelId) return [];
-    return this._messages.filter(m => m.channelId === this._selectedChannelId);
+    let msgs = this._messages.filter(m => m.channelId === this._selectedChannelId);
+    if (this._selectedTopicId) {
+      msgs = msgs.filter(m => m.topicId === this._selectedTopicId);
+    }
+    return msgs;
+  }
+
+  private _channelTopics(): QhorusTopic[] {
+    if (!this._selectedChannelId) return [];
+    return this._topics.filter(t => t.channelId === this._selectedChannelId && t.state !== 'MERGED');
+  }
+
+  private async _updateTopicState(channelId: string, topicId: string, state: string) {
+    try {
+      await authenticatedFetch(`${this.restBase}/channels/${channelId}/topics/${topicId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state }),
+      });
+    } catch (e) { console.error('Failed to update topic state:', e); }
+  }
+
+  private async _renameTopic(channelId: string, topicId: string, newName: string) {
+    try {
+      await authenticatedFetch(`${this.restBase}/channels/${channelId}/topics/${topicId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName }),
+      });
+    } catch (e) { console.error('Failed to rename topic:', e); }
+  }
+
+  private async _mergeTopic(channelId: string, sourceTopicId: string, targetTopicId: string) {
+    try {
+      await authenticatedFetch(`${this.restBase}/channels/${channelId}/topics/${sourceTopicId}/merge`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetTopicId }),
+      });
+    } catch (e) { console.error('Failed to merge topic:', e); }
+  }
+
+  private async _createTopic(channelId: string, name: string) {
+    try {
+      await authenticatedFetch(`${this.restBase}/channels/${channelId}/topics`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+      });
+    } catch (e) { console.error('Failed to create topic:', e); }
   }
 
   private _filteredReactions(): Reaction[] {
@@ -485,17 +566,35 @@ export class QhorusWorkbenchElement extends LitElement {
   }
 
   private _renderChat() {
+    const channelTopics = this._channelTopics();
+    const showTopics = channelTopics.length > 1;
+    const selectedTopic = channelTopics.find(t => t.id === this._selectedTopicId);
+    const defaultTopic = channelTopics.find(t => t.name === 'General');
+    const currentTopic = selectedTopic ?? defaultTopic;
     return html`
       ${this._renderConnectionBanner()}
+      ${showTopics ? html`
+        <channel-topic-bar
+          .topics=${channelTopics}
+          .selectedTopicId=${this._selectedTopicId}
+          .viewMode=${this._viewMode}>
+        </channel-topic-bar>
+      ` : nothing}
       <channel-feed
         .messages=${this._filteredMessages()}
         .reactions=${this._filteredReactions()}
         .eventStyling=${false}
+        .viewMode=${this._viewMode}
+        .topics=${channelTopics}
         .channelName=${this._channels.find(c => c.id === this._selectedChannelId)?.name}>
       </channel-feed>
       <channel-input
         .channelId=${this._selectedChannelId}
-        .replyTo=${this._replyTo}>
+        .replyTo=${this._replyTo}
+        .showTopicSelector=${showTopics}
+        .topic=${currentTopic?.name ?? 'General'}
+        .topicId=${currentTopic?.id ?? ''}
+        .topics=${channelTopics}>
       </channel-input>
     `;
   }
