@@ -99,6 +99,7 @@ export class QhorusWorkbenchElement extends LitElement {
       display: flex;
       flex-direction: column;
       min-width: 0;
+      min-height: 0;
     }
     .member-panel {
       width: 220px;
@@ -162,21 +163,36 @@ export class QhorusWorkbenchElement extends LitElement {
       overflow-y: auto;
     }
     .tab-switcher {
-      display: flex; gap: 4px; padding: 8px;
+      display: flex; flex-wrap: wrap; gap: var(--pages-space-1, 4px); padding: var(--pages-space-2, 8px);
       flex-shrink: 0;
     }
     .tab-switcher button {
-      flex: 1; padding: 6px 12px;
-      font-size: 12px; font-weight: 600;
-      background: var(--pages-neutral-2, #f0f0f0);
-      color: var(--pages-neutral-11, #555);
-      border: 1px solid var(--pages-neutral-4, #ddd);
-      border-radius: 16px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: var(--pages-space-1, 4px);
+      padding: var(--pages-space-1, 4px) var(--pages-space-2, 8px);
+      font-size: var(--pages-font-size-xs, 11px); font-weight: 600;
+      background: var(--pages-neutral-1, #fafafa);
+      color: var(--pages-neutral-11, #333);
+      border: 1px solid var(--pages-neutral-5, #d4d4d4);
+      border-radius: var(--pages-radius-full, 9999px);
+      cursor: pointer; white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
     }
-    .tab-switcher button:hover { background: var(--pages-neutral-3, #e8e8e8); }
+    .tab-switcher button:hover { background: var(--pages-neutral-3, #e5e5e5); }
     .tab-switcher button.active {
-      background: var(--pages-accent-9, #007bff);
-      color: #fff; border-color: var(--pages-accent-9, #007bff);
+      background: var(--pages-accent-3, #e0e7ff);
+      border-color: var(--pages-accent-7, #818cf8);
+      color: var(--pages-accent-11, #3730a3);
+    }
+    .tab-count {
+      background: var(--pages-neutral-4, #e5e5e5);
+      border-radius: var(--pages-radius-full, 9999px);
+      padding: 0 var(--pages-space-1, 4px);
+      font-size: var(--pages-font-size-xs, 11px);
+      min-width: 16px;
+      text-align: center;
+    }
+    .tab-switcher button.active .tab-count {
+      background: var(--pages-accent-5, #c7d2fe);
     }
     .sidebar-content { flex: 1; min-height: 0; overflow-y: auto; }
     /* --- phone drawers --- */
@@ -586,6 +602,7 @@ export class QhorusWorkbenchElement extends LitElement {
         .eventStyling=${false}
         .viewMode=${this._viewMode}
         .topics=${channelTopics}
+        .selectedMessageId=${this._selectedMessageId}
         .channelName=${this._channels.find(c => c.id === this._selectedChannelId)?.name}>
       </channel-feed>
       <channel-input
@@ -651,22 +668,30 @@ export class QhorusWorkbenchElement extends LitElement {
     `;
   }
 
+  private _tabletCount(panelId: string): number {
+    switch (panelId) {
+      case 'nav': return this._channels.length;
+      case 'members': return this._filteredMembers().length;
+      default: return 0;
+    }
+  }
+
   private _renderTablet() {
     const tabItems: { id: string; label: string }[] = [
-      { id: 'nav', label: 'Channels' },
-      { id: 'members', label: 'Members' },
-      { id: 'tasks', label: 'Tasks' },
-      { id: 'correlation', label: 'Correlation' },
-      { id: 'artifacts', label: 'Artifacts' },
+      { id: 'nav', label: '💬 Chans' },
+      { id: 'members', label: '👥 Mbrs' },
+      { id: 'tasks', label: '📋 Tasks' },
+      { id: 'correlation', label: '🔗 Corr' },
+      { id: 'artifacts', label: '📎 Arts' },
     ];
     return html`
       ${this._renderDockStrip()}
       <div class="sidebar-with-tabs">
         <div class="tab-switcher">
-          ${tabItems.map(t => html`
+          ${tabItems.map(t => { const count = this._tabletCount(t.id); return html`
             <button class=${this._tabletTab === t.id ? 'active' : ''}
-              @click=${() => { this._tabletTab = t.id; }}>${t.label}</button>
-          `)}
+              @click=${() => { this._tabletTab = t.id; }}>${t.label}${count > 0 ? html`<span class="tab-count">${count}</span>` : nothing}</button>
+          `; })}
         </div>
         <div class="sidebar-content">
           ${this._tabletTab ? this._renderPanel(this._tabletTab) : nothing}
