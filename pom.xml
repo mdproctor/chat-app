@@ -41,6 +41,13 @@ REST/WebSocket endpoints, and casehub-pages frontend.</description>
       <version>0.2-SNAPSHOT</version>
     </dependency>
 
+    <!-- Push protocol -->
+    <dependency>
+      <groupId>io.casehub</groupId>
+      <artifactId>casehub-pages-push</artifactId>
+      <version>0.2-SNAPSHOT</version>
+    </dependency>
+
     <!-- Auth -->
     <dependency>
       <groupId>io.casehub</groupId>

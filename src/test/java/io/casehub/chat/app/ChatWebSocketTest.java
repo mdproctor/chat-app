@@ -110,7 +110,7 @@ class ChatWebSocketTest {
 
             long lastSeq = 0;
             for (final Map<String, Object> snapshot : snapshots) {
-                final long seq = Long.parseLong((String) snapshot.get("seq"));
+                final long seq = ((Number) snapshot.get("seq")).longValue();
                 assertThat(seq).isGreaterThan(lastSeq);
                 lastSeq = seq;
             }
@@ -166,7 +166,7 @@ class ChatWebSocketTest {
             final var messagesSnapshot = snapshots.stream()
                                                   .filter(s -> "messages".equals(s.get("dataset")))
                                                   .findFirst().orElseThrow();
-            final long snapshotSeq = Long.parseLong((String) messagesSnapshot.get("seq"));
+            final long snapshotSeq = ((Number) messagesSnapshot.get("seq")).longValue();
 
             final String token = obtainToken("rest-user");
             String channelId = RestAssured.given()
@@ -217,7 +217,7 @@ class ChatWebSocketTest {
             assertThat(appendEvent).containsKey("columns");
             assertThat(appendEvent).containsKey("rows");
 
-            final long appendSeq = Long.parseLong((String) appendEvent.get("seq"));
+            final long appendSeq = ((Number) appendEvent.get("seq")).longValue();
             assertThat(appendSeq).isGreaterThan(snapshotSeq);
 
             @SuppressWarnings("unchecked") final var rows = (List<List<String>>) appendEvent.get("rows");

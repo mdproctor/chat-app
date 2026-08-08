@@ -2,6 +2,8 @@ package io.casehub.chat.app;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.casehub.pages.push.PushColumn;
+import io.casehub.pages.push.PushMessage;
 import io.casehub.qhorus.api.channel.Channel;
 import io.casehub.qhorus.api.channel.ChannelMembership;
 import io.casehub.qhorus.api.channel.ChannelReader;
@@ -26,7 +28,6 @@ import jakarta.inject.Inject;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -35,54 +36,54 @@ import java.util.concurrent.atomic.AtomicLong;
 @ApplicationScoped
 public class ChatWebSocketBroadcaster {
 
-    private static final List<Map<String, Object>> CHANNEL_COLUMNS    = List.of(
-            Map.of("id", "id", "name", "ID", "type", "LABEL"),
-            Map.of("id", "name", "name", "Name", "type", "LABEL"),
-            Map.of("id", "topic", "name", "Topic", "type", "LABEL"),
-            Map.of("id", "description", "name", "Description", "type", "LABEL"),
-            Map.of("id", "isPrivate", "name", "Private", "type", "LABEL"));
-    private static final List<Map<String, Object>> MESSAGE_COLUMNS    = List.of(
-            Map.of("id", "channelId", "name", "Channel", "type", "LABEL"),
-            Map.of("id", "messageId", "name", "Message ID", "type", "LABEL"),
-            Map.of("id", "parentId", "name", "Parent", "type", "LABEL"),
-            Map.of("id", "senderId", "name", "Sender", "type", "LABEL"),
-            Map.of("id", "text", "name", "Text", "type", "LABEL"),
-            Map.of("id", "timestamp", "name", "Timestamp", "type", "DATE"),
-            Map.of("id", "messageType", "name", "Type", "type", "LABEL"),
-            Map.of("id", "actorType", "name", "Actor", "type", "LABEL"),
-            Map.of("id", "topicId", "name", "Topic", "type", "LABEL"),
-            Map.of("id", "correlationId", "name", "Correlation", "type", "LABEL"),
-            Map.of("id", "artefactRefs", "name", "Artefacts", "type", "LABEL"),
-            Map.of("id", "target", "name", "Target", "type", "LABEL"));
-    private static final List<Map<String, Object>> MEMBER_COLUMNS     = List.of(
-            Map.of("id", "membershipId", "name", "Membership", "type", "LABEL"),
-            Map.of("id", "channelId", "name", "Channel", "type", "LABEL"),
-            Map.of("id", "memberId", "name", "Member", "type", "LABEL"),
-            Map.of("id", "displayName", "name", "Display Name", "type", "LABEL"),
-            Map.of("id", "role", "name", "Role", "type", "LABEL"));
-    private static final List<Map<String, Object>> PRESENCE_COLUMNS   = List.of(
-            Map.of("id", "memberId", "name", "Member", "type", "LABEL"),
-            Map.of("id", "status", "name", "Status", "type", "LABEL"),
-            Map.of("id", "lastActiveAt", "name", "Last Active", "type", "DATE"));
-    private static final List<Map<String, Object>> REACTION_COLUMNS   = List.of(
-            Map.of("id", "messageId", "name", "Message ID", "type", "LABEL"),
-            Map.of("id", "emoji", "name", "Emoji", "type", "LABEL"));
-    private static final List<Map<String, Object>> COMMITMENT_COLUMNS = List.of(
-            Map.of("id", "correlationId", "name", "Correlation", "type", "LABEL"),
-            Map.of("id", "channelId", "name", "Channel", "type", "LABEL"),
-            Map.of("id", "state", "name", "State", "type", "LABEL"),
-            Map.of("id", "deadline", "name", "Deadline", "type", "DATE"),
-            Map.of("id", "acknowledgedAt", "name", "Acknowledged", "type", "DATE"),
-            Map.of("id", "resolvedAt", "name", "Resolved", "type", "DATE"),
-            Map.of("id", "createdAt", "name", "Created", "type", "DATE"));
-    private static final List<Map<String, Object>> TOPIC_COLUMNS      = List.of(
-            Map.of("id", "topicId", "name", "Topic ID", "type", "LABEL"),
-            Map.of("id", "channelId", "name", "Channel", "type", "LABEL"),
-            Map.of("id", "name", "name", "Name", "type", "LABEL"),
-            Map.of("id", "state", "name", "State", "type", "LABEL"),
-            Map.of("id", "messageCount", "name", "Messages", "type", "LABEL"),
-            Map.of("id", "latestActivityTs", "name", "Latest", "type", "DATE"),
-            Map.of("id", "createdAt", "name", "Created", "type", "DATE"));
+    private static final List<PushColumn> CHANNEL_COLUMNS    = List.of(
+            new PushColumn("id", "ID", "LABEL"),
+            new PushColumn("name", "Name", "LABEL"),
+            new PushColumn("topic", "Topic", "LABEL"),
+            new PushColumn("description", "Description", "LABEL"),
+            new PushColumn("isPrivate", "Private", "LABEL"));
+    private static final List<PushColumn> MESSAGE_COLUMNS    = List.of(
+            new PushColumn("channelId", "Channel", "LABEL"),
+            new PushColumn("messageId", "Message ID", "LABEL"),
+            new PushColumn("parentId", "Parent", "LABEL"),
+            new PushColumn("senderId", "Sender", "LABEL"),
+            new PushColumn("text", "Text", "LABEL"),
+            new PushColumn("timestamp", "Timestamp", "DATE"),
+            new PushColumn("messageType", "Type", "LABEL"),
+            new PushColumn("actorType", "Actor", "LABEL"),
+            new PushColumn("topicId", "Topic", "LABEL"),
+            new PushColumn("correlationId", "Correlation", "LABEL"),
+            new PushColumn("artefactRefs", "Artefacts", "LABEL"),
+            new PushColumn("target", "Target", "LABEL"));
+    private static final List<PushColumn> MEMBER_COLUMNS     = List.of(
+            new PushColumn("membershipId", "Membership", "LABEL"),
+            new PushColumn("channelId", "Channel", "LABEL"),
+            new PushColumn("memberId", "Member", "LABEL"),
+            new PushColumn("displayName", "Display Name", "LABEL"),
+            new PushColumn("role", "Role", "LABEL"));
+    private static final List<PushColumn> PRESENCE_COLUMNS   = List.of(
+            new PushColumn("memberId", "Member", "LABEL"),
+            new PushColumn("status", "Status", "LABEL"),
+            new PushColumn("lastActiveAt", "Last Active", "DATE"));
+    private static final List<PushColumn> REACTION_COLUMNS   = List.of(
+            new PushColumn("messageId", "Message ID", "LABEL"),
+            new PushColumn("emoji", "Emoji", "LABEL"));
+    private static final List<PushColumn> COMMITMENT_COLUMNS = List.of(
+            new PushColumn("correlationId", "Correlation", "LABEL"),
+            new PushColumn("channelId", "Channel", "LABEL"),
+            new PushColumn("state", "State", "LABEL"),
+            new PushColumn("deadline", "Deadline", "DATE"),
+            new PushColumn("acknowledgedAt", "Acknowledged", "DATE"),
+            new PushColumn("resolvedAt", "Resolved", "DATE"),
+            new PushColumn("createdAt", "Created", "DATE"));
+    private static final List<PushColumn> TOPIC_COLUMNS      = List.of(
+            new PushColumn("topicId", "Topic ID", "LABEL"),
+            new PushColumn("channelId", "Channel", "LABEL"),
+            new PushColumn("name", "Name", "LABEL"),
+            new PushColumn("state", "State", "LABEL"),
+            new PushColumn("messageCount", "Messages", "LABEL"),
+            new PushColumn("latestActivityTs", "Latest", "DATE"),
+            new PushColumn("createdAt", "Created", "DATE"));
     private final        Set<WebSocketConnection>  connections        = new CopyOnWriteArraySet<>();
     private final        AtomicLong                seq                = new AtomicLong(0);
 
@@ -123,11 +124,11 @@ public class ChatWebSocketBroadcaster {
         var channels = channelReader.listAll();
 
         var channelRows = channels.stream()
-                                  .map(ch -> List.<Object>of(
+                                  .map(ch -> List.of(
                                           ch.id().toString(), ch.name(), "", ch.description() != null ? ch.description() : "", "false"))
                                   .toList();
 
-        var topicRows = new ArrayList<List<Object>>();
+        var topicRows = new ArrayList<List<String>>();
         for (var ch : channels) {
             for (var ts : topicManager.listTopics(ch.id())) {
                 var  topic   = topicReader.find(ch.id(), ts.name());
@@ -142,14 +143,14 @@ public class ChatWebSocketBroadcaster {
             }
         }
 
-        var messageRows = new ArrayList<List<Object>>();
+        var messageRows = new ArrayList<List<String>>();
         for (var ch : channels) {
             for (var msg : messaging.history(ch.id(), 0, 10000)) {
                 messageRows.add(messageToRow(msg));
             }
         }
 
-        var memberRows = new ArrayList<List<Object>>();
+        var memberRows = new ArrayList<List<String>>();
         for (var ch : channels) {
             for (var m : memberReader.findByChannel(ch.id())) {
                 String membershipId = ch.id().toString() + ":" + m.memberId();
@@ -157,7 +158,7 @@ public class ChatWebSocketBroadcaster {
             }
         }
 
-        var reactionRows = new ArrayList<List<Object>>();
+        var reactionRows = new ArrayList<List<String>>();
         for (var ch : channels) {
             var msgs   = messaging.history(ch.id(), 0, 10000);
             var msgIds = msgs.stream().map(Message::id).toList();
@@ -171,7 +172,7 @@ public class ChatWebSocketBroadcaster {
             }
         }
 
-        var presenceRows = new ArrayList<List<Object>>();
+        var presenceRows = new ArrayList<List<String>>();
         for (var ch : channels) {
             for (var p : presenceTracker.getChannelPresence(ch.id())) {
                 presenceRows.add(List.of(p.memberId(), p.status().name(),
@@ -179,32 +180,29 @@ public class ChatWebSocketBroadcaster {
             }
         }
 
-        var commitmentRows = new ArrayList<List<Object>>();
+        var commitmentRows = new ArrayList<List<String>>();
         for (var ch : channels) {
             for (var c : commitmentReader.findByChannel(ch.id())) {
                 commitmentRows.add(commitmentToRow(c));
             }
         }
 
-        return toJson(List.of(
-                Map.of("dataset", "channels", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                       "columns", CHANNEL_COLUMNS, "rows", channelRows),
-                Map.of("dataset", "topics", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                       "columns", TOPIC_COLUMNS, "rows", topicRows),
-                Map.of("dataset", "messages", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                       "columns", MESSAGE_COLUMNS, "rows", messageRows),
-                Map.of("dataset", "members", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                       "columns", MEMBER_COLUMNS, "rows", memberRows),
-                Map.of("dataset", "presence", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                       "columns", PRESENCE_COLUMNS, "rows", presenceRows),
-                Map.of("dataset", "reactions", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                       "columns", REACTION_COLUMNS, "rows", reactionRows),
-                Map.of("dataset", "commitments", "op", "snapshot", "seq", String.valueOf(seq.incrementAndGet()),
-                       "columns", COMMITMENT_COLUMNS, "rows", commitmentRows)));
+        return PushMessage.batch(
+                PushMessage.snapshot("channels", CHANNEL_COLUMNS, channelRows, seq.incrementAndGet()),
+                PushMessage.snapshot("topics", TOPIC_COLUMNS, topicRows, seq.incrementAndGet()),
+                PushMessage.snapshot("messages", MESSAGE_COLUMNS, messageRows, seq.incrementAndGet()),
+                PushMessage.snapshot("members", MEMBER_COLUMNS, memberRows, seq.incrementAndGet()),
+                PushMessage.snapshot("presence", PRESENCE_COLUMNS, presenceRows, seq.incrementAndGet()),
+                PushMessage.snapshot("reactions", REACTION_COLUMNS, reactionRows, seq.incrementAndGet()),
+                PushMessage.snapshot("commitments", COMMITMENT_COLUMNS, commitmentRows, seq.incrementAndGet()));
     }
 
     void pushMessage(ChannelRef channel, OutboundMessage message) {
-        var row = new ArrayList<Object>(12);
+        String artefactRefsJson = "[]";
+        if (message.artefactRefs() != null && !message.artefactRefs().isEmpty()) {
+            artefactRefsJson = toJson(message.artefactRefs());
+        }
+        var row = new ArrayList<String>(12);
         row.add(channel.id().toString());
         row.add(String.valueOf(message.sequenceId()));
         row.add(message.inReplyTo() != null ? String.valueOf(message.inReplyTo()) : null);
@@ -215,122 +213,79 @@ public class ChatWebSocketBroadcaster {
         row.add(message.senderActorType().name());
         row.add(message.topic() != null ? message.topic() : "");
         row.add(message.correlationId());
-        String artefactRefsJson = "[]";
-        if (message.artefactRefs() != null && !message.artefactRefs().isEmpty()) {
-            artefactRefsJson = toJson(message.artefactRefs());
-        }
         row.add(artefactRefsJson);
         row.add(message.target());
-        broadcast(Map.of(
-                "dataset", "messages", "op", "append",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", MESSAGE_COLUMNS,
-                "rows", List.of(row)));}
+        broadcast(PushMessage.append("messages", MESSAGE_COLUMNS, List.of(row), seq.incrementAndGet()));
+    }
 
     void broadcastChannelAppend(Channel channel) {
-        broadcast(Map.of(
-                "dataset", "channels", "op", "append",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", CHANNEL_COLUMNS,
-                "rows", List.of(List.of(
-                        channel.id().toString(), channel.name(), "",
-                        channel.description() != null ? channel.description() : "", "false"))));
+        broadcast(PushMessage.append("channels", CHANNEL_COLUMNS,
+                                     List.of(List.of(channel.id().toString(), channel.name(), "",
+                                                     channel.description() != null ? channel.description() : "", "false")),
+                                     seq.incrementAndGet()));
     }
 
     void broadcastChannelRemove(UUID channelId) {
-        broadcast(Map.of(
-                "dataset", "channels", "op", "remove",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", CHANNEL_COLUMNS,
-                "key", channelId.toString()));
+        broadcast(PushMessage.remove("channels", channelId.toString(), seq.incrementAndGet()));
     }
 
     void broadcastPresenceReplace(String memberId, PresenceStatus status) {
-        broadcast(Map.of(
-                "dataset", "presence", "op", "replace",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", PRESENCE_COLUMNS,
-                "key", memberId,
-                "row", List.of(memberId, status.name(), Instant.now().toString())));
+        broadcast(PushMessage.replace("presence", PRESENCE_COLUMNS, memberId,
+                                      List.of(memberId, status.name(), Instant.now().toString()),
+                                      seq.incrementAndGet()));
     }
 
     void broadcastMemberAppend(UUID channelId, ChannelMembership membership) {
         String membershipId = channelId.toString() + ":" + membership.memberId();
-        broadcast(Map.of(
-                "dataset", "members", "op", "append",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", MEMBER_COLUMNS,
-                "rows", List.of(List.of(membershipId, channelId.toString(),
-                                        membership.memberId(), membership.memberId(), membership.role().name()))));
+        broadcast(PushMessage.append("members", MEMBER_COLUMNS,
+                                     List.of(List.of(membershipId, channelId.toString(),
+                                                     membership.memberId(), membership.memberId(), membership.role().name())),
+                                     seq.incrementAndGet()));
     }
 
     void broadcastMemberRemove(UUID channelId, String memberId) {
-        broadcast(Map.of(
-                "dataset", "members", "op", "remove",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", MEMBER_COLUMNS,
-                "key", channelId.toString() + ":" + memberId));
+        broadcast(PushMessage.remove("members", channelId.toString() + ":" + memberId, seq.incrementAndGet()));
     }
 
     void broadcastReactionAppend(Long messageId, String emoji) {
-        broadcast(Map.of(
-                "dataset", "reactions", "op", "append",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", REACTION_COLUMNS,
-                "rows", List.of(List.of(String.valueOf(messageId), emoji))));
+        broadcast(PushMessage.append("reactions", REACTION_COLUMNS,
+                                     List.of(List.of(String.valueOf(messageId), emoji)),
+                                     seq.incrementAndGet()));
     }
 
     void broadcastReactionRemove(Long messageId, String emoji) {
-        broadcast(Map.of(
-                "dataset", "reactions", "op", "remove",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", REACTION_COLUMNS,
-                "key", String.valueOf(messageId) + ":" + emoji));
+        broadcast(PushMessage.remove("reactions", String.valueOf(messageId) + ":" + emoji, seq.incrementAndGet()));
     }
 
     void broadcastCommitment(Commitment commitment) {
-        broadcast(Map.of(
-                "dataset", "commitments", "op", "replace",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", COMMITMENT_COLUMNS,
-                "key", commitment.correlationId(),
-                "row", commitmentToRow(commitment)));
+        broadcast(PushMessage.replace("commitments", COMMITMENT_COLUMNS,
+                                      commitment.correlationId(), commitmentToRow(commitment),
+                                      seq.incrementAndGet()));
     }
 
     void broadcastCommitmentAppend(Commitment commitment) {
-        broadcast(Map.of(
-                "dataset", "commitments", "op", "append",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", COMMITMENT_COLUMNS,
-                "rows", List.of(commitmentToRow(commitment))));
+        broadcast(PushMessage.append("commitments", COMMITMENT_COLUMNS,
+                                     List.of(commitmentToRow(commitment)),
+                                     seq.incrementAndGet()));
     }
 
     void broadcastTopicAppend(UUID channelId, Topic topic) {
-        broadcast(Map.of(
-                "dataset", "topics", "op", "append",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", TOPIC_COLUMNS,
-                "rows", List.of(topicToRow(channelId, topic))));
+        broadcast(PushMessage.append("topics", TOPIC_COLUMNS,
+                                     List.of(topicToRow(channelId, topic)),
+                                     seq.incrementAndGet()));
     }
 
     void broadcastTopicReplace(UUID channelId, Topic topic) {
-        broadcast(Map.of(
-                "dataset", "topics", "op", "replace",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", TOPIC_COLUMNS,
-                "key", String.valueOf(topic.id()),
-                "row", topicToRow(channelId, topic)));
+        broadcast(PushMessage.replace("topics", TOPIC_COLUMNS,
+                                      String.valueOf(topic.id()), topicToRow(channelId, topic),
+                                      seq.incrementAndGet()));
     }
 
     void broadcastTopicRemove(UUID channelId, Long topicId) {
-        broadcast(Map.of(
-                "dataset", "topics", "op", "remove",
-                "seq", String.valueOf(seq.incrementAndGet()),
-                "columns", TOPIC_COLUMNS,
-                "key", String.valueOf(topicId)));
+        broadcast(PushMessage.remove("topics", String.valueOf(topicId), seq.incrementAndGet()));
     }
 
-    private List<Object> topicToRow(UUID channelId, Topic topic) {
+    private List<String> topicToRow(UUID channelId, Topic topic) {
         return List.of(
                 String.valueOf(topic.id()), channelId.toString(), topic.name(),
                 topic.resolved() ? "RESOLVED" : "ACTIVE",
@@ -338,7 +293,7 @@ public class ChatWebSocketBroadcaster {
                 topic.createdAt() != null ? topic.createdAt().toString() : "");
     }
 
-    private List<Object> commitmentToRow(Commitment c) {
+    private List<String> commitmentToRow(Commitment c) {
         return List.of(
                 c.correlationId(), c.channelId().toString(), c.state().name(),
                 c.expiresAt() != null ? c.expiresAt().toString() : "",
@@ -347,8 +302,17 @@ public class ChatWebSocketBroadcaster {
                 c.createdAt().toString());
     }
 
-    private List<Object> messageToRow(Message msg) {
-        var row = new ArrayList<Object>(12);
+    private List<String> messageToRow(Message msg) {
+        String topicIdStr = "";
+        if (msg.topic() != null && !msg.topic().isEmpty()) {
+            var topic = topicReader.find(msg.channelId(), msg.topic());
+            topicIdStr = topic.map(t -> String.valueOf(t.id())).orElse("");
+        }
+        String artefactRefsJson = "[]";
+        if (msg.artefactRefs() != null && !msg.artefactRefs().isEmpty()) {
+            artefactRefsJson = toJson(msg.artefactRefs());
+        }
+        var row = new ArrayList<String>(12);
         row.add(msg.channelId().toString());
         row.add(String.valueOf(msg.id()));
         row.add(msg.inReplyTo() != null ? String.valueOf(msg.inReplyTo()) : null);
@@ -357,24 +321,14 @@ public class ChatWebSocketBroadcaster {
         row.add(msg.createdAt().toString());
         row.add(msg.messageType().name());
         row.add(msg.actorType().name());
-        String topicIdStr = "";
-        if (msg.topic() != null && !msg.topic().isEmpty()) {
-            var topic = topicReader.find(msg.channelId(), msg.topic());
-            topicIdStr = topic.map(t -> String.valueOf(t.id())).orElse("");
-        }
         row.add(topicIdStr);
         row.add(msg.correlationId());
-        String artefactRefsJson = "[]";
-        if (msg.artefactRefs() != null && !msg.artefactRefs().isEmpty()) {
-            artefactRefsJson = toJson(msg.artefactRefs());
-        }
         row.add(artefactRefsJson);
         row.add(msg.target());
         return row;
     }
 
-    private void broadcast(Object event) {
-        String json = toJson(event);
+    private void broadcast(String json) {
         connections.forEach(c -> c.sendText(json).subscribe().with(
                 ignored -> {},
                 err -> Log.warnf("WebSocket send failed: %s", err.getMessage())));
