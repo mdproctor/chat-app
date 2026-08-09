@@ -49,11 +49,11 @@ src/test/java/io/casehub/chat/app/
 src/main/webui/src/**/*.test.ts       -- 140 frontend tests (vitest + happy-dom/jsdom)
     auth.test.ts                      -- 8 tests
     workbench/chat-demo-adapter.test.ts   -- 39 tests
-    workbench/qhorus-workbench.test.ts    -- 36 tests
+    workbench/qhorus-workbench.test.ts    -- 39 tests
     workbench/connection-controller.test.ts -- 20 tests
     workbench/swipe-controller.test.ts    -- 14 tests
     panels/qhorus-task-panel.test.ts      -- 9 tests
-    panels/qhorus-correlation-panel.test.ts -- 8 tests
+    panels/qhorus-correlation-panel.test.ts -- 11 tests
     panels/qhorus-artifact-panel.test.ts  -- 6 tests
 ```
 

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { MQ_DESKTOP } from './responsive.js';
 
 if (!window.matchMedia) {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: query.includes('min-width: 1280'),
+    matches: query === MQ_DESKTOP,
     media: query,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
@@ -664,6 +665,67 @@ describe('QhorusWorkbenchElement', () => {
     it('has SwipeController attached', async () => {
       const el = await renderWorkbench() as any;
       expect(el._swipeController).toBeDefined();
+    });
+  });
+
+  describe('phone layout', () => {
+    beforeEach(() => {
+      vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        onchange: null,
+        dispatchEvent: vi.fn(),
+      }) as MediaQueryList);
+    });
+
+    afterEach(() => {
+      vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+        matches: query === MQ_DESKTOP,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        onchange: null,
+        dispatchEvent: vi.fn(),
+      }) as MediaQueryList);
+    });
+
+    it('phone header buttons have aria-labels', async () => {
+      const el = await renderWorkbench() as any;
+      const buttons = el.shadowRoot!.querySelectorAll('.phone-header .dock-btn');
+      expect(buttons.length).toBeGreaterThanOrEqual(2);
+      const channelsBtn = buttons[0] as HTMLElement;
+      const membersBtn = buttons[1] as HTMLElement;
+      expect(channelsBtn.getAttribute('aria-label')).toBe('Channels');
+      expect(membersBtn.getAttribute('aria-label')).toBe('Members');
+    });
+
+    it('members button opens right-side drawer', async () => {
+      const el = await renderWorkbench() as any;
+      const buttons = el.shadowRoot!.querySelectorAll('.phone-header .dock-btn');
+      const membersBtn = buttons[1] as HTMLElement;
+      membersBtn.click();
+      await el.updateComplete;
+
+      expect(el._drawerOpen).toBe('members');
+      const rightDrawer = el.shadowRoot!.querySelector('.drawer.right') as HTMLElement;
+      expect(rightDrawer).toBeTruthy();
+      expect(rightDrawer.classList.contains('open')).toBe(true);
+    });
+
+    it('main panel is inert when drawer is open', async () => {
+      const el = await renderWorkbench() as any;
+      const buttons = el.shadowRoot!.querySelectorAll('.phone-header .dock-btn');
+      (buttons[1] as HTMLElement).click();
+      await el.updateComplete;
+
+      const mainPanel = el.shadowRoot!.querySelector('.main-panel') as HTMLElement;
+      expect(mainPanel.getAttribute('inert')).not.toBeNull();
     });
   });
 });

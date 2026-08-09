@@ -106,4 +106,63 @@ describe('QhorusCorrelationPanelElement', () => {
     const nodes = el.shadowRoot!.querySelectorAll('.flow-node');
     expect(nodes.length).toBe(3);
   });
+
+  // --- Commitment transition badges (#25) ---
+
+  it('shows transition badge on connector when commitment was acknowledged', async () => {
+    const msgs = [
+      makeMsg('cmd1', 'alice', 'Do it', 'COMMAND', 'corr-1', '2026-01-01T10:00:00Z'),
+      makeMsg('ack1', 'bob', 'On it', 'STATUS', 'corr-1', '2026-01-01T10:01:00Z'),
+      makeMsg('done1', 'bob', 'Done', 'DONE', 'corr-1', '2026-01-01T10:05:00Z'),
+    ];
+    const commitments = new Map<string, CommitmentRecord>([
+      ['corr-1', {
+        state: 'FULFILLED' as CommitmentState,
+        createdAt: '2026-01-01T10:00:00Z',
+        acknowledgedAt: '2026-01-01T10:01:00Z',
+        resolvedAt: '2026-01-01T10:05:00Z',
+        updatedAt: '2026-01-01T10:05:00Z',
+      }],
+    ]);
+    const el = await render(msgs, commitments, 'cmd1');
+    const badges = el.shadowRoot!.querySelectorAll('commitment-transition-badge');
+    expect(badges.length).toBe(2);
+  });
+
+  it('shows single transition badge when acknowledged but not resolved', async () => {
+    const msgs = [
+      makeMsg('cmd1', 'alice', 'Do it', 'COMMAND', 'corr-1', '2026-01-01T10:00:00Z'),
+      makeMsg('ack1', 'bob', 'On it', 'STATUS', 'corr-1', '2026-01-01T10:01:00Z'),
+    ];
+    const commitments = new Map<string, CommitmentRecord>([
+      ['corr-1', {
+        state: 'ACKNOWLEDGED' as CommitmentState,
+        createdAt: '2026-01-01T10:00:00Z',
+        acknowledgedAt: '2026-01-01T10:01:00Z',
+        updatedAt: '2026-01-01T10:01:00Z',
+      }],
+    ]);
+    const el = await render(msgs, commitments, 'cmd1');
+    const badges = el.shadowRoot!.querySelectorAll('commitment-transition-badge');
+    expect(badges.length).toBe(1);
+    const badge = badges[0] as any;
+    expect(badge.transition.from).toBe('OPEN');
+    expect(badge.transition.to).toBe('ACKNOWLEDGED');
+  });
+
+  it('shows no transition badges when commitment has no state changes', async () => {
+    const msgs = [
+      makeMsg('cmd1', 'alice', 'Do it', 'COMMAND', 'corr-1', '2026-01-01T10:00:00Z'),
+    ];
+    const commitments = new Map<string, CommitmentRecord>([
+      ['corr-1', {
+        state: 'OPEN' as CommitmentState,
+        createdAt: '2026-01-01T10:00:00Z',
+        updatedAt: '2026-01-01T10:00:00Z',
+      }],
+    ]);
+    const el = await render(msgs, commitments, 'cmd1');
+    const badges = el.shadowRoot!.querySelectorAll('commitment-transition-badge');
+    expect(badges.length).toBe(0);
+  });
 });

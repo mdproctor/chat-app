@@ -5,7 +5,9 @@ import { messageTypeCategory, isObligationCreating } from '@casehubio/blocks-ui-
 import { emitPagesEvent } from '@casehubio/blocks-ui-core';
 import { ChannelEventTopics } from '@casehubio/blocks-ui-channel-activity';
 import type { CommitmentRecord } from '../types.js';
+import type { TransitionRecord } from '@casehubio/blocks-ui-commitment-viz/src/types.js';
 import '@casehubio/blocks-ui-core';
+import '@casehubio/blocks-ui-commitment-viz/src/commitment-transition-badge.js';
 
 @customElement('qhorus-correlation-panel')
 export class QhorusCorrelationPanelElement extends LitElement {
@@ -171,23 +173,52 @@ export class QhorusCorrelationPanelElement extends LitElement {
       `;
     }
 
+    const correlationId = chain.find(m => m.correlationId)?.correlationId;
+    const record = correlationId ? this.commitments.get(correlationId) : undefined;
+    const transitions = record ? this._deriveTransitions(record) : [];
+
     return html`
       <div class="panel-title">Correlation</div>
       <div class="flow-container">
         ${chain.map((msg, i) => html`
-          ${i > 0 ? this._renderConnector(chain[i - 1]!, msg) : nothing}
+          ${i > 0 ? this._renderConnector(chain[i - 1]!, msg, transitions) : nothing}
           ${this._renderNode(msg)}
         `)}
       </div>
     `;
   }
 
-  private _renderConnector(prev: QhorusMessage, curr: QhorusMessage) {
+  private _deriveTransitions(record: CommitmentRecord): TransitionRecord[] {
+    const transitions: TransitionRecord[] = [];
+    if (record.acknowledgedAt) {
+      transitions.push({ from: 'OPEN', to: 'ACKNOWLEDGED', timestamp: record.acknowledgedAt });
+    }
+    if (record.resolvedAt && record.state !== 'OPEN' && record.state !== 'ACKNOWLEDGED') {
+      const prev = record.acknowledgedAt ? 'ACKNOWLEDGED' : 'OPEN';
+      transitions.push({ from: prev, to: record.state, timestamp: record.resolvedAt });
+    }
+    return transitions;
+  }
+
+  private _matchTransitionToConnector(
+    transition: TransitionRecord,
+    prev: QhorusMessage,
+    curr: QhorusMessage,
+  ): boolean {
+    const ts = new Date(transition.timestamp).getTime();
+    const prevTs = new Date(prev.createdAt).getTime();
+    const currTs = new Date(curr.createdAt).getTime();
+    return ts > prevTs && ts <= currTs;
+  }
+
+  private _renderConnector(prev: QhorusMessage, curr: QhorusMessage, transitions: TransitionRecord[]) {
     const duration = new Date(curr.createdAt).getTime() - new Date(prev.createdAt).getTime();
+    const matched = transitions.filter(t => this._matchTransitionToConnector(t, prev, curr));
     return html`
       <div class="flow-connector">
         <div class="connector-line"></div>
         <span class="flow-duration">${this._formatDuration(duration)}</span>
+        ${matched.map(t => html`<commitment-transition-badge .transition=${t} compact></commitment-transition-badge>`)}
       </div>
     `;
   }

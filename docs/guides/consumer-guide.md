@@ -33,7 +33,7 @@ This is NOT a connector or library. It is an Integration-tier application that w
 - **ChatDemoLogin** (`<chat-demo-login>`) -- Dev authentication overlay; calls `POST /dev/auth/login` with a name, stores JWT in `sessionStorage`, dispatches `pages-auth-success` event
 - **ChatDemoIdentity** (`<chat-demo-identity>`) -- Identity switcher widget with dropdown picker, filter-as-you-type, avatar display; switches identity by re-authenticating and reloading
 - **QhorusTaskPanelElement** (`<qhorus-task-panel>`) -- Dockable panel showing obligation-creating messages grouped as Overdue/Active/Completed; renders `commitment-range-bar` and `commitment-state-pill` from blocks-ui-commitment-viz
-- **QhorusCorrelationPanelElement** (`<qhorus-correlation-panel>`) -- Dockable panel showing the correlation chain (or reply chain) for a selected message as a vertical flow with speech-act badges, actor icons, duration connectors, and commitment state pills
+- **QhorusCorrelationPanelElement** (`<qhorus-correlation-panel>`) -- Dockable panel showing the correlation chain (or reply chain) for a selected message as a vertical flow with speech-act badges, actor icons, duration connectors, commitment state pills, and commitment transition badges (state change history derived from timestamps)
 - **QhorusArtifactPanelElement** (`<qhorus-artifact-panel>`) -- Dockable panel for viewing artefact references with back/forward history navigation, type icons (DOCUMENT, CODE, CASE, WORK_ITEM, etc.), scope highlighting, and URI copy
 
 ## REST API

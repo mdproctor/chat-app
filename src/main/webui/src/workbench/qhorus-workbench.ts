@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { ChatDemoAdapter } from './chat-demo-adapter.js';
 import { SwipeController } from './swipe-controller.js';
 import { ConnectionController } from './connection-controller.js';
+import { MQ_TABLET, MQ_DESKTOP } from './responsive.js';
 import {
   ChannelEventTopics,
   ChannelFeedElement,
@@ -17,6 +18,7 @@ import type { DockItem, LayoutState } from '@casehubio/pages-component';
 import { createLocalLayoutStore } from '@casehubio/pages-runtime';
 import { getToken, getIdentity, authenticatedFetch } from '../auth.js';
 import { injectTheme, applyThemeMode, DEFAULT_THEME } from '@casehubio/pages-ui-tokens';
+import { stateCategoryStyles } from '@casehubio/blocks-ui-core';
 import type { CommitmentRecord } from '../types.js';
 import { ARTEFACT_SELECTED } from '../types.js';
 import { decorateCommitmentRanges } from '@casehubio/blocks-ui-commitment-viz/src/range-decorator.js';
@@ -295,8 +297,8 @@ export class QhorusWorkbenchElement extends LitElement {
   }
 
   private _setupMediaQueries() {
-    this._mqTablet = window.matchMedia('(min-width: 768px) and (max-width: 1279px)');
-    this._mqDesktop = window.matchMedia('(min-width: 1280px)');
+    this._mqTablet = window.matchMedia(MQ_TABLET);
+    this._mqDesktop = window.matchMedia(MQ_DESKTOP);
     this._mqTablet.addEventListener('change', this._onMediaChange);
     this._mqDesktop.addEventListener('change', this._onMediaChange);
     this._updateMode();
@@ -589,6 +591,17 @@ export class QhorusWorkbenchElement extends LitElement {
 
   private _commitmentDecorations: RangeDecoration[] = [];
 
+  private _computeHighlights(): Record<string, string> {
+    const highlights: Record<string, string> = {};
+    for (const dec of this._commitmentDecorations) {
+      const bg = stateCategoryStyles(dec.category).background;
+      for (const id of dec.messageIds) {
+        highlights[id] = bg;
+      }
+    }
+    return highlights;
+  }
+
   private _renderCommitmentBar = (msg: QhorusMessage) => {
     const decoration = this._commitmentDecorations.find(d => d.startMessageId === msg.id);
     if (!decoration) return undefined;
@@ -627,7 +640,8 @@ export class QhorusWorkbenchElement extends LitElement {
         .topics=${channelTopics}
         .selectedMessageId=${this._selectedMessageId}
         .channelName=${this._channels.find(c => c.id === this._selectedChannelId)?.name}
-        .renderContent=${this._renderCommitmentBar}>
+        .renderContent=${this._renderCommitmentBar}
+        .messageHighlights=${this._computeHighlights()}>
       </channel-feed>
       <channel-input
         .channelId=${this._selectedChannelId}
@@ -737,13 +751,13 @@ export class QhorusWorkbenchElement extends LitElement {
         ${this._drawerOpen && this._drawerOpen !== 'nav' ? this._renderPanel(this._drawerOpen) : nothing}
       </div>
       <div class="backdrop ${this._drawerOpen ? 'visible' : ''}" @click=${this._closeDrawer}></div>
-      <div class="main-panel">
+      <div class="main-panel" ?inert=${!!this._drawerOpen}>
         <div class="phone-header">
-          <button class="dock-btn" title="Channels" @click=${() => this._toggleDock('nav')}>☰</button>
+          <button class="dock-btn" title="Channels" aria-label="Channels" @click=${() => this._toggleDock('nav')}>☰</button>
           ${channelName ? html`<span class="channel-name">#${channelName}</span>` : nothing}
           <span class="spacer"></span>
-          <button class="dock-btn" title="Members" @click=${() => this._toggleDock('members')}>👥</button>
-          <button class="dock-btn" title="More" @click=${() => this._toggleDock('tasks')}>⋯</button>
+          <button class="dock-btn" title="Members" aria-label="Members" @click=${() => this._toggleDock('members')}>👥</button>
+          <button class="dock-btn" title="More" aria-label="More" @click=${() => this._toggleDock('tasks')}>⋯</button>
         </div>
         ${this._renderChat()}
       </div>
