@@ -24,12 +24,11 @@ import { ARTEFACT_SELECTED } from '../types.js';
 import { decorateCommitmentRanges } from '@casehubio/blocks-ui-commitment-viz/src/range-decorator.js';
 import type { RangeDecoration } from '@casehubio/blocks-ui-commitment-viz/src/types.js';
 import '../identity-widget.js';
-import { QhorusTaskPanelElement } from '../panels/qhorus-task-panel.js';
-import { QhorusCorrelationPanelElement } from '../panels/qhorus-correlation-panel.js';
+import { ChannelTaskPanelElement, ChannelCorrelationPanelElement } from '@casehubio/blocks-ui-channel-activity';
 import { QhorusArtifactPanelElement } from '../panels/qhorus-artifact-panel.js';
 
 void ChannelFeedElement; void ChannelNavElement; void ChannelMemberPanelElement; void ChannelInputElement; void ChannelTopicBarElement;
-void QhorusTaskPanelElement; void QhorusCorrelationPanelElement; void QhorusArtifactPanelElement;
+void ChannelTaskPanelElement; void ChannelCorrelationPanelElement; void QhorusArtifactPanelElement;
 
 type LayoutMode = 'desktop' | 'tablet' | 'phone';
 
@@ -690,14 +689,14 @@ export class QhorusWorkbenchElement extends LitElement {
     switch (panelId) {
       case 'nav': return this._renderNav();
       case 'members': return this._renderMembers();
-      case 'tasks': return html`<qhorus-task-panel
+      case 'tasks': return html`<blocks-channel-task-panel
         .messages=${this._filteredMessages()}
         .commitments=${this._commitments}
-        .selectedMessageId=${this._selectedMessageId}></qhorus-task-panel>`;
-      case 'correlation': return html`<qhorus-correlation-panel
+        .selectedMessageId=${this._selectedMessageId}></blocks-channel-task-panel>`;
+      case 'correlation': return html`<blocks-channel-correlation-panel
         .messages=${this._filteredMessages()}
         .commitments=${this._commitments}
-        .selectedMessageId=${this._selectedMessageId}></qhorus-correlation-panel>`;
+        .selectedMessageId=${this._selectedMessageId}></blocks-channel-correlation-panel>`;
       case 'artifacts': return html`<qhorus-artifact-panel
         .selectedArtefactRef=${this._selectedArtefactRef}></qhorus-artifact-panel>`;
       default: return nothing;
