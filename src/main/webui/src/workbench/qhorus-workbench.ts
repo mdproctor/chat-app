@@ -47,7 +47,12 @@ export class QhorusWorkbenchElement extends LitElement {
   @state() private _selectedChannelId = '';
   @state() private _replyTo?: { messageId: string; senderName: string };
 
-  @state() private _dockState: Record<string, boolean> = { nav: true, members: true, tasks: false, correlation: false, artifacts: false };
+  private _layoutStore = createLocalLayoutStore('qhorus-workbench:');
+  @state() private _layoutState: LayoutState = {
+    splits: {},
+    docks: Object.fromEntries(QhorusWorkbenchElement.DOCK_ITEMS.map(d => [d.panelId, d.defaultOpen ?? false])),
+    panels: {},
+  };
   @state() private _mode: LayoutMode = 'desktop';
   @state() private _tabletTab: string = 'nav';
   @state() private _drawerOpen: string | null = null;
@@ -260,6 +265,12 @@ export class QhorusWorkbenchElement extends LitElement {
     this.addEventListener('pages-event', this._onChatEvent as EventListener);
     this._setupMediaQueries();
     this._initTheme();
+    this._loadLayout();
+  }
+
+  private async _loadLayout() {
+    const saved = await this._layoutStore.load('workbench');
+    if (saved) this._layoutState = saved;
   }
 
   override firstUpdated() {
@@ -322,12 +333,16 @@ export class QhorusWorkbenchElement extends LitElement {
         this._tabletTab = panelId;
       }
     } else {
-      this._dockState = { ...this._dockState, [panelId]: !this._dockState[panelId] };
+      this._layoutState = {
+        ...this._layoutState,
+        docks: { ...this._layoutState.docks, [panelId]: !this._layoutState.docks[panelId] },
+      };
+      this._layoutStore.save('workbench', this._layoutState);
     }
   }
 
   private _isDockOpen(panelId: string): boolean {
-    return !!this._dockState[panelId];
+    return !!this._layoutState.docks[panelId];
   }
 
   private _closeDrawer() { this._drawerOpen = null; }
@@ -385,7 +400,11 @@ export class QhorusWorkbenchElement extends LitElement {
       case ARTEFACT_SELECTED: {
         this._selectedArtefactRef = (payload as { artefactRef: ArtefactRef }).artefactRef;
         if (!this._isDockOpen('artifacts') && this._mode === 'desktop') {
-          this._dockState = { ...this._dockState, artifacts: true };
+          this._layoutState = {
+          ...this._layoutState,
+          docks: { ...this._layoutState.docks, artifacts: true },
+        };
+        this._layoutStore.save('workbench', this._layoutState);
         }
         break;
       }
