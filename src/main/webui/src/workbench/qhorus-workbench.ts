@@ -15,7 +15,7 @@ import {
 import type { SendMessagePayload, ReactPayload, CreateChannelPayload, ArtefactRef, SelectTopicPayload, ViewModePayload, TopicActionPayload, RenameTopicPayload, MergeTopicPayload, CreateTopicPayload } from '@casehubio/blocks-ui-channel-activity';
 import type { QhorusMessage, QhorusChannel, QhorusTopic, Reaction, ChannelMember, PresenceState } from '@casehubio/blocks-ui-channel-activity';
 import type { DockItem, LayoutState } from '@casehubio/pages-component';
-import { createLocalLayoutStore } from '@casehubio/pages-runtime';
+import { createLocalLayoutStore } from '@casehubio/pages-runtime/layout-store.js';
 import { getToken, getIdentity, authenticatedFetch } from '../auth.js';
 import { applyTheme } from '@casehubio/pages-ui-tokens';
 import { stateCategoryStyles } from '@casehubio/blocks-ui-core';
