@@ -626,6 +626,44 @@ describe('QhorusWorkbenchElement', () => {
     });
   });
 
+  describe('layout persistence', () => {
+    it('initializes dock state from DockItem defaults', async () => {
+      const el = await renderWorkbench() as any;
+      expect(el._layoutState.docks.nav).toBe(true);
+      expect(el._layoutState.docks.members).toBe(true);
+      expect(el._layoutState.docks.tasks).toBe(false);
+      expect(el._layoutState.docks.correlation).toBe(false);
+      expect(el._layoutState.docks.artifacts).toBe(false);
+    });
+
+    it('toggleDock updates layoutState.docks', async () => {
+      const el = await renderWorkbench() as any;
+      expect(el._layoutState.docks.tasks).toBe(false);
+      el._toggleDock('tasks');
+      expect(el._layoutState.docks.tasks).toBe(true);
+      el._toggleDock('tasks');
+      expect(el._layoutState.docks.tasks).toBe(false);
+    });
+
+    it('saves layout state via layoutStore on toggle', async () => {
+      const el = await renderWorkbench() as any;
+      const saved: any[] = [];
+      el._layoutStore = { load: async () => null, save: async (_k: string, s: any) => { saved.push(s); }, delete: async () => {} };
+      el._toggleDock('tasks');
+      expect(saved.length).toBe(1);
+      expect(saved[0].docks.tasks).toBe(true);
+    });
+
+    it('restores layout state from layoutStore on connect', async () => {
+      const state = { splits: {}, docks: { nav: false, members: true, tasks: true, correlation: false, artifacts: false }, panels: {} };
+      const el = await renderWorkbench() as any;
+      el._layoutStore = { load: async () => state, save: async () => {}, delete: async () => {} };
+      await el._loadLayout();
+      expect(el._layoutState.docks.nav).toBe(false);
+      expect(el._layoutState.docks.tasks).toBe(true);
+    });
+  });
+
   describe('layout structure', () => {
     it('channel-feed fills available space in main panel', async () => {
       const el = await renderWorkbench();
