@@ -17,7 +17,7 @@ import type { QhorusMessage, QhorusChannel, QhorusTopic, Reaction, ChannelMember
 import type { DockItem, LayoutState } from '@casehubio/pages-component';
 import { createLocalLayoutStore } from '@casehubio/pages-runtime';
 import { getToken, getIdentity, authenticatedFetch } from '../auth.js';
-import { injectTheme, applyThemeMode, DEFAULT_THEME } from '@casehubio/pages-ui-tokens';
+import { applyTheme } from '@casehubio/pages-ui-tokens';
 import { stateCategoryStyles } from '@casehubio/blocks-ui-core';
 import type { CommitmentRecord } from '../types.js';
 import { ARTEFACT_SELECTED } from '../types.js';
@@ -272,14 +272,12 @@ export class QhorusWorkbenchElement extends LitElement {
 
   private _initTheme() {
     this.updateComplete.then(() => {
-      const root = this.renderRoot as ShadowRoot;
-      injectTheme(DEFAULT_THEME, root.host as HTMLElement);
       this._applyTheme();
     });
   }
 
   private _applyTheme() {
-    applyThemeMode(this, this._darkMode ? 'dark' : 'light');
+    applyTheme(this._darkMode ? 'casehub-dark' : 'casehub-light', this);
   }
 
   private _toggleTheme() {
