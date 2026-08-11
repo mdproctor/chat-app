@@ -1,6 +1,7 @@
 package io.casehub.chat.app;
 
 import io.casehub.pages.push.EventStore;
+import io.casehub.pages.push.PushMessage;
 import io.casehub.pages.push.PushRequest;
 import io.casehub.pages.push.TopicRegistry;
 import io.quarkus.logging.Log;
@@ -34,14 +35,14 @@ public class ChatPushWebSocket {
                     String topic = entry.getKey();
                     long since = entry.getValue();
                     if (since == 0) {
-                        sendText(connection, datasetBuilder.buildSnapshot(topic));
+                        sendText(connection, PushMessage.event(topic, datasetBuilder.buildSnapshot(topic)));
                     } else {
                         var events = eventStore.replay(topic, since, 10000);
                         if (!events.isEmpty() && events.get(0).seq() > since + 1) {
-                            sendText(connection, datasetBuilder.buildSnapshot(topic));
+                            sendText(connection, PushMessage.event(topic, datasetBuilder.buildSnapshot(topic)));
                         } else {
                             for (var event : events) {
-                                sendText(connection, event.payloadJson());
+                                sendText(connection, PushMessage.event(topic, event.payloadJson(), event.seq()));
                             }
                         }
                     }

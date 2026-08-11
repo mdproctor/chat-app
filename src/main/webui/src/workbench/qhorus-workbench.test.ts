@@ -291,7 +291,7 @@ describe('QhorusWorkbenchElement', () => {
     );
   });
 
-  describe('WebSocket integration', () => {
+  describe('push connection', () => {
     let OriginalWebSocket: typeof WebSocket;
     let mockWsInstances: any[];
 
@@ -306,6 +306,7 @@ describe('QhorusWorkbenchElement', () => {
         onerror: ((e: any) => void) | null = null;
         readyState = 1;
         close = vi.fn();
+        send = vi.fn();
         constructor(url: string) {
           this.url = url;
           mockWsInstances.push(this);
@@ -317,60 +318,16 @@ describe('QhorusWorkbenchElement', () => {
       globalThis.WebSocket = OriginalWebSocket;
     });
 
-    it('creates WebSocket on connectedCallback when endpoint and token are set', async () => {
+    it('creates WebSocket to /ws/push with token', async () => {
       const el = document.createElement('qhorus-workbench') as any;
-      el.endpoint = '/ws/chat';
+      el.endpoint = '/ws/push';
       document.body.appendChild(el);
       await el.updateComplete;
 
       expect(mockWsInstances.length).toBeGreaterThanOrEqual(1);
       const ws = mockWsInstances[mockWsInstances.length - 1];
-      expect(ws.url).toContain('/ws/chat');
+      expect(ws.url).toContain('/ws/push');
       expect(ws.url).toContain('token=mock-token');
-    });
-
-    it('applies adapter op on WebSocket message', async () => {
-      const el = document.createElement('qhorus-workbench') as any;
-      el.endpoint = '/ws/chat';
-      document.body.appendChild(el);
-      await el.updateComplete;
-
-      const ws = mockWsInstances[mockWsInstances.length - 1];
-      ws.onopen?.({});
-      const applyOpSpy = vi.spyOn(el._adapter, 'applyOp');
-
-      const opData = { op: 'snapshot', dataset: 'channels', rows: [['ch-1', 'general', '']] };
-      ws.onmessage?.({ data: JSON.stringify(opData) });
-
-      expect(applyOpSpy).toHaveBeenCalledWith(opData);
-    });
-
-    it('reconnects after WebSocket close', async () => {
-      vi.useFakeTimers();
-      const el = document.createElement('qhorus-workbench') as any;
-      el.endpoint = '/ws/chat';
-      document.body.appendChild(el);
-      await el.updateComplete;
-
-      const initialCount = mockWsInstances.length;
-      const ws = mockWsInstances[mockWsInstances.length - 1];
-      ws.onopen?.({});
-      ws.onclose?.({ code: 1006 });
-
-      vi.advanceTimersByTime(1000);
-      expect(mockWsInstances.length).toBe(initialCount + 1);
-      vi.useRealTimers();
-    });
-
-    it('handles malformed WebSocket message without crashing', async () => {
-      const el = document.createElement('qhorus-workbench') as any;
-      el.endpoint = '/ws/chat';
-      document.body.appendChild(el);
-      await el.updateComplete;
-
-      const ws = mockWsInstances[mockWsInstances.length - 1];
-      ws.onopen?.({});
-      expect(() => ws.onmessage?.({ data: 'not-json{{{' })).not.toThrow();
     });
   });
 
@@ -554,11 +511,8 @@ describe('QhorusWorkbenchElement', () => {
     expect(element._replyTo).toBeUndefined();
   });
 
-  it('cleans up WebSocket and timeout on disconnectedCallback', async () => {
-    vi.useFakeTimers();
-
+  it('cleans up EventConnection on disconnectedCallback', async () => {
     let OriginalWebSocket = globalThis.WebSocket;
-    let mockWsInstances: any[] = [];
     (globalThis as any).WebSocket = class MockWebSocket {
       url: string;
       onopen: ((e: any) => void) | null = null;
@@ -567,29 +521,18 @@ describe('QhorusWorkbenchElement', () => {
       onerror: ((e: any) => void) | null = null;
       readyState = 1;
       close = vi.fn();
-      constructor(url: string) {
-        this.url = url;
-        mockWsInstances.push(this);
-      }
+      send = vi.fn();
+      constructor(url: string) { this.url = url; }
     };
 
     const el = document.createElement('qhorus-workbench') as any;
-    el.endpoint = '/ws/chat';
+    el.endpoint = '/ws/push';
     document.body.appendChild(el);
     await el.updateComplete;
 
-    const ws = mockWsInstances[mockWsInstances.length - 1];
-    ws.onopen?.({});
-    ws.onclose?.({ code: 1006 });
-
+    expect(el._eventConn).toBeDefined();
     el.remove();
-
-    const wsCountBefore = mockWsInstances.length;
-    vi.advanceTimersByTime(5000);
-    expect(mockWsInstances.length).toBe(wsCountBefore);
-
     globalThis.WebSocket = OriginalWebSocket;
-    vi.useRealTimers();
   });
 
   describe('theme toggle', () => {

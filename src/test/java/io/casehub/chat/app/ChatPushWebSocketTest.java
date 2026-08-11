@@ -43,11 +43,15 @@ class ChatPushWebSocketTest {
                 {"op":"listen","id":"1","topics":["chat:channels"],"since":{"chat:channels":0}}""");
 
             String raw = future.get(5, TimeUnit.SECONDS);
-            Map<String, Object> snapshot = objectMapper.readValue(raw, new TypeReference<>() {});
-            assertThat(snapshot.get("op")).isEqualTo("snapshot");
-            assertThat(snapshot.get("dataset")).isEqualTo("channels");
-            assertThat(snapshot).containsKey("columns");
-            assertThat(snapshot).containsKey("rows");
+            Map<String, Object> event = objectMapper.readValue(raw, new TypeReference<>() {});
+            assertThat(event.get("op")).isEqualTo("event");
+            assertThat(event.get("topic")).isEqualTo("chat:channels");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = (Map<String, Object>) event.get("payload");
+            assertThat(payload.get("op")).isEqualTo("snapshot");
+            assertThat(payload.get("dataset")).isEqualTo("channels");
+            assertThat(payload).containsKey("columns");
+            assertThat(payload).containsKey("rows");
         }
     }
 
