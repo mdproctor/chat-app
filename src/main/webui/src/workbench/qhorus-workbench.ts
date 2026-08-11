@@ -2,7 +2,8 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { ChatDemoAdapter } from './chat-demo-adapter.js';
 import { SwipeController } from './swipe-controller.js';
-import { ConnectionController } from './connection-controller.js';
+import { createEventConnection } from '@casehubio/pages-data/dataset/external/sources/event-connection.js';
+import type { EventConnection, ConnectionStatus } from '@casehubio/pages-data/dataset/external/sources/event-connection.js';
 import { MQ_TABLET, MQ_DESKTOP } from './responsive.js';
 import {
   ChannelEventTopics,
@@ -79,10 +80,8 @@ export class QhorusWorkbenchElement extends LitElement {
     onClose: () => { this._drawerOpen = null; },
     isOpenQuery: (side) => side === 'left' ? this._drawerOpen === 'nav' : this._drawerOpen === 'members',
   });
-  private _connection = new ConnectionController(this, {
-    onMessage: (op) => this._adapter.applyOp(op as any),
-    onStateChange: () => this.requestUpdate(),
-  });
+  private _eventConn?: EventConnection;
+  @state() private _pushStatus: ConnectionStatus = 'disconnected';
   private _mqTablet?: MediaQueryList;
   private _mqDesktop?: MediaQueryList;
 
@@ -276,7 +275,26 @@ export class QhorusWorkbenchElement extends LitElement {
     const token = getToken();
     if (token && this.endpoint) {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      this._connection.connect(`${proto}//${location.host}${this.endpoint}`, token);
+      const url = `${proto}//${location.host}/ws/push?token=${token}`;
+      const eventTarget = new EventTarget();
+
+      this._eventConn = createEventConnection(url, {
+        config: { eventTarget },
+        onStatusChange: (status) => { this._pushStatus = status; },
+      });
+
+      this._eventConn.listen([
+        'chat:channels', 'chat:topics', 'chat:messages',
+        'chat:members', 'chat:presence', 'chat:reactions',
+        'chat:commitments',
+      ]);
+
+      eventTarget.addEventListener('pages-event', (e: Event) => {
+        const detail = (e as CustomEvent).detail;
+        if (detail?.payload) {
+          this._adapter.applyOp(detail.payload as any);
+        }
+      });
     }
   }
 
@@ -299,7 +317,7 @@ export class QhorusWorkbenchElement extends LitElement {
     super.disconnectedCallback();
     this._adapter.offChange(this._onDataChange);
     this.removeEventListener('pages-event', this._onChatEvent as EventListener);
-    this._connection.disconnect();
+    this._eventConn?.close();
     this._mqTablet?.removeEventListener('change', this._onMediaChange);
     this._mqDesktop?.removeEventListener('change', this._onMediaChange);
   }
@@ -592,12 +610,11 @@ export class QhorusWorkbenchElement extends LitElement {
   }
 
   private _renderConnectionBanner() {
-    const state = this._connection.state;
-    if (state === 'connected' || state === 'connecting') return nothing;
-    if (state === 'reconnecting') {
+    if (this._pushStatus === 'connected' || this._pushStatus === 'disconnected') return nothing;
+    if (this._pushStatus === 'reconnecting') {
       return html`<div class="connection-banner reconnecting">
         <span class="connection-spinner"></span>
-        Reconnecting (attempt ${this._connection.attempt})...
+        Reconnecting...
       </div>`;
     }
     return html`<div class="connection-banner disconnected">

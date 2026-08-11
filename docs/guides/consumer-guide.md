@@ -19,8 +19,10 @@ This is NOT a connector or library. It is an Integration-tier application that w
 
 - **ChatResource** -- JAX-RS REST endpoints at `/api` for channels, messages, replies, reactions, members, presence, read tracking, commitments, correlation chains, and topics (create, list, update, rename, merge)
 - **ChatAppChannelBackend** -- Implements `HumanParticipatingChannelBackend` from the qhorus gateway; registers with `BackendRegistry` on channel initialisation, pushes outbound messages via `ChatWebSocketBroadcaster`, and observes `CommitmentStateChangedEvent` for real-time commitment updates
-- **ChatWebSocket** -- WebSocket endpoint at `/ws/chat`; on open sends a full dataset snapshot, delegates incoming ops to the broadcaster
-- **ChatWebSocketBroadcaster** -- Manages WebSocket connections (`CopyOnWriteArraySet`), builds dataset snapshots, and broadcasts dataset operations (snapshot/append/replace/remove) across seven datasets: channels, topics, messages, members, presence, reactions, commitments
+- **ChatPushWebSocket** -- WebSocket endpoint at `/ws/push` implementing the pages-push protocol; handles `PushRequest.Listen` with per-topic since-map replay from EventStore, gap detection with snapshot fallback
+- **ChatWebSocketBroadcaster** -- Delegates to pages-push `EventBroadcaster` for durable event storage and fan-out via `TopicRegistry` across seven dataset topics (chat:channels, chat:topics, chat:messages, chat:members, chat:presence, chat:reactions, chat:commitments)
+- **ChatDatasetBuilder** -- Column definitions, row builders, and per-topic snapshot construction for all seven datasets; extracted from the broadcaster for reuse by ChatPushWebSocket
+- **PushInfrastructure** -- CDI producer for `EventStore` (InMemoryEventStore), `TopicRegistry`, and `EventBroadcaster`; manages WebSocket connection map for `SessionSender`
 - **ChatAppCurrentPrincipal** -- Implements `CurrentPrincipal` from platform-api; extracts identity from `SecurityIdentity`/JWT, defaults tenant to `"chat-app"`
 - **WebSocketTokenUpgradeCheck** -- `HttpUpgradeCheck` that validates JWT token from the `?token=` query parameter before allowing WebSocket upgrade; rejects with 401 if missing or invalid
 
@@ -28,7 +30,7 @@ This is NOT a connector or library. It is an Integration-tier application that w
 
 - **QhorusWorkbenchElement** (`<qhorus-workbench>`) -- Lit element app shell with three responsive layout modes (desktop >= 1280px, tablet 768-1279px, phone < 768px); dock strip with five panels (Channels, Members, Tasks, Correlation, Artifacts); theme toggle (dark/light via pages-ui-tokens); topic bar and view mode switching (flat/threaded/topics)
 - **ChatDemoAdapter** -- WebSocket protocol adapter that parses dataset operations (snapshot/append/replace/remove) across seven datasets into typed arrays (`QhorusChannel[]`, `QhorusTopic[]`, `QhorusMessage[]`, `Reaction[]`, `ChannelMember[]`, `PresenceState[]`, `Map<string, CommitmentRecord>`); computes reply counts from `inReplyTo` references; resolves topic names from topic IDs
-- **ConnectionController** -- Lit reactive controller for WebSocket lifecycle: connect, disconnect, exponential backoff reconnection (1s initial, 30s max), state machine (disconnected/connecting/connected/reconnecting), non-retryable close codes (1000, 1001, 4401, 4403)
+- Uses `createEventConnection` from `@casehubio/pages-data` for WebSocket lifecycle with pages-push protocol (Listen/Unlisten, per-topic seq tracking, since-map reconnection)
 - **SwipeController** -- Lit reactive controller for edge-swipe drawer gestures on phone layout; configurable edge width, velocity/distance thresholds, `prefers-reduced-motion` support
 - **ChatDemoLogin** (`<chat-demo-login>`) -- Dev authentication overlay; calls `POST /dev/auth/login` with a name, stores JWT in `sessionStorage`, dispatches `pages-auth-success` event
 - **ChatDemoIdentity** (`<chat-demo-identity>`) -- Identity switcher widget with dropdown picker, filter-as-you-type, avatar display; switches identity by re-authenticating and reloading
@@ -113,21 +115,36 @@ All endpoints require JWT authentication (`@Authenticated`). Base path: `/api`.
 
 ## WebSocket Protocol
 
-**Endpoint:** `ws://host:8090/ws/chat?token=JWT`
+**Endpoint:** `ws://host:8090/ws/push?token=JWT`
 
 Authentication is via `?token=` query parameter, validated by `WebSocketTokenUpgradeCheck` before upgrade.
 
-On connect, the server sends a JSON array of seven snapshot operations (one per dataset). Subsequent mutations send individual operations.
+Uses the pages-push protocol. Client sends a `Listen` request with topics and a `since` map; server replays missed events or sends a full snapshot (since=0). Seven dataset topics: `chat:channels`, `chat:topics`, `chat:messages`, `chat:members`, `chat:presence`, `chat:reactions`, `chat:commitments`.
 
-### Dataset Operations
+### Push Protocol
 
-Each operation is a JSON object:
+Client sends:
+```json
+{"op":"listen","id":"1","topics":["chat:channels","chat:messages",...],"since":{"chat:channels":0,"chat:messages":0,...}}
+```
+
+Server responds with event-wrapped dataset operations:
+```json
+{"op":"event","topic":"chat:channels","payload":{"op":"snapshot","dataset":"channels","columns":[...],"rows":[...]},"seq":1}
+{"op":"event","topic":"chat:messages","payload":{"op":"append","dataset":"messages","columns":[...],"rows":[...]},"seq":42}
+```
+
+On reconnect, client sends `since` with last-seen seq per topic; server replays only missed events.
+
+### Dataset Operations (inside event payload)
+
+Each payload is a JSON object:
 
 ```json
-{ "dataset": "messages", "op": "snapshot", "seq": "1", "columns": [...], "rows": [[...], ...] }
-{ "dataset": "messages", "op": "append", "seq": "5", "columns": [...], "rows": [[...]] }
-{ "dataset": "presence", "op": "replace", "seq": "6", "columns": [...], "key": "alice", "row": [...] }
-{ "dataset": "channels", "op": "remove", "seq": "7", "columns": [...], "key": "ch-uuid" }
+{ "dataset": "messages", "op": "snapshot", "columns": [...], "rows": [[...], ...] }
+{ "dataset": "messages", "op": "append", "columns": [...], "rows": [[...]] }
+{ "dataset": "presence", "op": "replace", "columns": [...], "key": "alice", "row": [...] }
+{ "dataset": "channels", "op": "remove", "key": "ch-uuid" }
 ```
 
 ### Datasets
