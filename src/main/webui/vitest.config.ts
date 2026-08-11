@@ -6,5 +6,6 @@ export default mergeConfig(viteConfig, defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['**/*.test.ts'],
+    exclude: ['**/node_modules/**', '**/.casehub-packages/**'],
   },
 }));

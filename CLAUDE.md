@@ -62,7 +62,7 @@ File issues against peer repos instead of committing directly.
 |------------|-------------|-------|
 | adr        | project     | lands in `docs/adr/` — promoted at epic close |
 | specs      | project     | lands in `docs/specs/` — promoted at epic close |
-| blog       | workspace   | staged here; published to mdproctor.github.io via publish-blog |
+| blog       | project     | lands in `docs/blog/` — promoted at work end |
 | plans      | workspace   | stay in workspace permanently |
 | snapshots  | workspace   | stay in workspace permanently |
 | handover   | workspace   | |

@@ -593,19 +593,19 @@ describe('QhorusWorkbenchElement', () => {
   });
 
   describe('theme toggle', () => {
-    it('starts in light mode with pages-theme-light class', async () => {
+    it('starts in light mode with pages-theme-casehub-light class', async () => {
       const el = await renderWorkbench();
       await el.updateComplete;
-      expect(el.classList.contains('pages-theme-light')).toBe(true);
-      expect(el.classList.contains('pages-theme-dark')).toBe(false);
+      expect(el.classList.contains('pages-theme-casehub-light')).toBe(true);
+      expect(el.classList.contains('pages-theme-casehub-dark')).toBe(false);
     });
 
     it('toggles to dark mode', async () => {
       const el = await renderWorkbench() as any;
       el._toggleTheme();
       await el.updateComplete;
-      expect(el.classList.contains('pages-theme-dark')).toBe(true);
-      expect(el.classList.contains('pages-theme-light')).toBe(false);
+      expect(el.classList.contains('pages-theme-casehub-dark')).toBe(true);
+      expect(el.classList.contains('pages-theme-casehub-light')).toBe(false);
       expect(el._darkMode).toBe(true);
     });
 
@@ -614,7 +614,7 @@ describe('QhorusWorkbenchElement', () => {
       el._toggleTheme();
       el._toggleTheme();
       await el.updateComplete;
-      expect(el.classList.contains('pages-theme-light')).toBe(true);
+      expect(el.classList.contains('pages-theme-casehub-light')).toBe(true);
       expect(el._darkMode).toBe(false);
     });
 

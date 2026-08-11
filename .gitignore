@@ -7,6 +7,9 @@ wksp
 .quinoa/
 chat-app.db*
 node_modules/
+.casehub-packages/
 dist/
 .playwright-mcp/
 src/main/webui/test-results/
+.mvn/maven.config
+.mvn/slot-settings.xml
