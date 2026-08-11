@@ -60,61 +60,19 @@ full replay -- equivalent to the current snapshot-on-connect behaviour.
 
 ---
 
-## 2. PushClient (pages-data)
+## 2. Frontend Push Client (pages-data -- already exists)
 
-New file: `packages/pages-data/src/push/push-client.ts`
+pages-data already provides a complete push protocol client stack:
 
-A Lit `ReactiveController` that manages a single WebSocket connection
-to a pages-push endpoint.
+- **`createEventConnection`** -- core client: Listen/Unlisten with since
+  map, per-topic seq tracking with dedup, cursor persistence via Storage
+  API, exponential backoff reconnection with replay, gap reporting
+- **`EventStream`** -- component-facing wrapper: topic filtering, event
+  buffering, onChange/onReconnect callbacks, pool integration
+- **`EventStreamPool`** -- reference-counted connection sharing
 
-### API
-
-```typescript
-export class PushClient implements ReactiveController {
-  constructor(host: ReactiveControllerHost, options: PushClientOptions);
-
-  readonly state: 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
-  readonly attempt: number;
-
-  listen(topics: string[]): void;
-  unlisten(topics: string[]): void;
-  onMessage(handler: (msg: PushMessage) => void): void;
-  offMessage(handler: (msg: PushMessage) => void): void;
-  disconnect(): void;
-}
-
-interface PushClientOptions {
-  url: string | (() => string);
-  tokenFn?: () => string | null;
-}
-```
-
-### Internals
-
-- Maintains `seqs: Map<string, number>` -- last-seen seq per topic,
-  updated from each incoming PushMessage's `seq` field
-- On `listen(topics)`: if connected, sends `PushRequest.Listen` with
-  current `since` map for those topics. If not yet connected, queues
-  the topics and sends on open.
-- On WebSocket close (retryable): exponential backoff (1s base, 30s cap).
-  On reconnect, re-sends `Listen` for all subscribed topics with
-  accumulated `since` map -- server replays the delta.
-- Non-retryable close codes: 1000 (normal), 1001 (going away), 4401
-  (unauthorized), 4403 (forbidden)
-- Token passed as `?token=` query parameter on the WebSocket URL
-- Each incoming message is dispatched to all registered handlers
-- `state` and `attempt` are reactive -- changing them calls
-  `host.requestUpdate()` for UI reactivity
-
-### Exports
-
-```typescript
-// packages/pages-data/src/push/index.ts
-export { PushClient, type PushClientOptions } from './push-client.js';
-
-// packages/pages-data/src/index.ts (add to existing barrel)
-export { PushClient, type PushClientOptions } from './push/index.js';
-```
+No new pages-data code is needed. Chat-app replaces `ConnectionController`
+with `EventStream` (or `createEventConnection` directly).
 
 ---
 
