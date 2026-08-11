@@ -1,5 +1,6 @@
 package io.casehub.chat.app;
 
+import io.casehub.pages.push.EventBroadcaster;
 import io.casehub.pages.push.PushMessage;
 import io.casehub.qhorus.api.channel.Channel;
 import io.casehub.qhorus.api.channel.ChannelMembership;
@@ -8,131 +9,106 @@ import io.casehub.qhorus.api.gateway.ChannelRef;
 import io.casehub.qhorus.api.gateway.OutboundMessage;
 import io.casehub.qhorus.api.message.Commitment;
 import io.casehub.qhorus.api.message.Topic;
-import java.time.Instant;
-import io.quarkus.logging.Log;
-import io.quarkus.websockets.next.WebSocketConnection;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.atomic.AtomicLong;
 
 @ApplicationScoped
 public class ChatWebSocketBroadcaster {
 
-    private final Set<WebSocketConnection> connections = new CopyOnWriteArraySet<>();
-    private final AtomicLong seq = new AtomicLong(0);
+    @Inject ChatDatasetBuilder datasetBuilder;
+    @Inject EventBroadcaster eventBroadcaster;
 
-    @Inject
-    ChatDatasetBuilder datasetBuilder;
 
-    void addConnection(WebSocketConnection connection) {
-        connections.add(connection);
-    }
-
-    void removeConnection(WebSocketConnection connection) {
-        connections.remove(connection);
-    }
-
-    void registerChannel(UUID channelId, String channelName) {
-    }
-
-    void deregisterChannel(ChannelRef channel) {
-    }
 
     String buildSnapshot() {
         return PushMessage.batch(
-                datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_CHANNELS, seq.incrementAndGet()),
-                datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_TOPICS, seq.incrementAndGet()),
-                datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_MESSAGES, seq.incrementAndGet()),
-                datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_MEMBERS, seq.incrementAndGet()),
-                datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_PRESENCE, seq.incrementAndGet()),
-                datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_REACTIONS, seq.incrementAndGet()),
-                datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_COMMITMENTS, seq.incrementAndGet()));
+            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_CHANNELS),
+            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_TOPICS),
+            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_MESSAGES),
+            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_MEMBERS),
+            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_PRESENCE),
+            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_REACTIONS),
+            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_COMMITMENTS));
     }
 
     void pushMessage(ChannelRef channel, OutboundMessage message) {
         var row = datasetBuilder.outboundMessageToRow(channel, message);
-        broadcast(PushMessage.append("messages", ChatDatasetBuilder.MESSAGE_COLUMNS, List.of(row), seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_MESSAGES,
+            PushMessage.append("messages", ChatDatasetBuilder.MESSAGE_COLUMNS, List.of(row)));
     }
 
     void broadcastChannelAppend(Channel channel) {
-        broadcast(PushMessage.append("channels", ChatDatasetBuilder.CHANNEL_COLUMNS,
-            List.of(List.of(channel.id().toString(), channel.name(), "",
-                channel.description() != null ? channel.description() : "", "false")),
-            seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_CHANNELS,
+            PushMessage.append("channels", ChatDatasetBuilder.CHANNEL_COLUMNS,
+                List.of(List.of(channel.id().toString(), channel.name(), "",
+                    channel.description() != null ? channel.description() : "", "false"))));
     }
 
     void broadcastChannelRemove(UUID channelId) {
-        broadcast(PushMessage.remove("channels", channelId.toString(), seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_CHANNELS,
+            PushMessage.remove("channels", channelId.toString()));
     }
 
     void broadcastPresenceReplace(String memberId, PresenceStatus status) {
-        broadcast(PushMessage.replace("presence", ChatDatasetBuilder.PRESENCE_COLUMNS, memberId,
-            List.of(memberId, status.name(), Instant.now().toString()),
-            seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_PRESENCE,
+            PushMessage.replace("presence", ChatDatasetBuilder.PRESENCE_COLUMNS, memberId,
+                List.of(memberId, status.name(), Instant.now().toString())));
     }
 
     void broadcastMemberAppend(UUID channelId, ChannelMembership membership) {
         String membershipId = channelId.toString() + ":" + membership.memberId();
-        broadcast(PushMessage.append("members", ChatDatasetBuilder.MEMBER_COLUMNS,
-            List.of(List.of(membershipId, channelId.toString(),
-                membership.memberId(), membership.memberId(), membership.role().name())),
-            seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_MEMBERS,
+            PushMessage.append("members", ChatDatasetBuilder.MEMBER_COLUMNS,
+                List.of(List.of(membershipId, channelId.toString(),
+                    membership.memberId(), membership.memberId(), membership.role().name()))));
     }
 
     void broadcastMemberRemove(UUID channelId, String memberId) {
-        broadcast(PushMessage.remove("members", channelId.toString() + ":" + memberId, seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_MEMBERS,
+            PushMessage.remove("members", channelId.toString() + ":" + memberId));
     }
 
     void broadcastReactionAppend(Long messageId, String emoji) {
-        broadcast(PushMessage.append("reactions", ChatDatasetBuilder.REACTION_COLUMNS,
-            List.of(List.of(String.valueOf(messageId), emoji)),
-            seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_REACTIONS,
+            PushMessage.append("reactions", ChatDatasetBuilder.REACTION_COLUMNS,
+                List.of(List.of(String.valueOf(messageId), emoji))));
     }
 
     void broadcastReactionRemove(Long messageId, String emoji) {
-        broadcast(PushMessage.remove("reactions", String.valueOf(messageId) + ":" + emoji, seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_REACTIONS,
+            PushMessage.remove("reactions", String.valueOf(messageId) + ":" + emoji));
     }
 
     void broadcastCommitment(Commitment commitment) {
-        broadcast(PushMessage.replace("commitments", ChatDatasetBuilder.COMMITMENT_COLUMNS,
-            commitment.correlationId(), datasetBuilder.commitmentToRow(commitment),
-            seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_COMMITMENTS,
+            PushMessage.replace("commitments", ChatDatasetBuilder.COMMITMENT_COLUMNS,
+                commitment.correlationId(), datasetBuilder.commitmentToRow(commitment)));
     }
 
     void broadcastCommitmentAppend(Commitment commitment) {
-        broadcast(PushMessage.append("commitments", ChatDatasetBuilder.COMMITMENT_COLUMNS,
-            List.of(datasetBuilder.commitmentToRow(commitment)),
-            seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_COMMITMENTS,
+            PushMessage.append("commitments", ChatDatasetBuilder.COMMITMENT_COLUMNS,
+                List.of(datasetBuilder.commitmentToRow(commitment))));
     }
 
     void broadcastTopicAppend(UUID channelId, Topic topic) {
-        broadcast(PushMessage.append("topics", ChatDatasetBuilder.TOPIC_COLUMNS,
-            List.of(datasetBuilder.topicToRow(channelId, topic)),
-            seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_TOPICS,
+            PushMessage.append("topics", ChatDatasetBuilder.TOPIC_COLUMNS,
+                List.of(datasetBuilder.topicToRow(channelId, topic))));
     }
 
     void broadcastTopicReplace(UUID channelId, Topic topic) {
-        broadcast(PushMessage.replace("topics", ChatDatasetBuilder.TOPIC_COLUMNS,
-            String.valueOf(topic.id()), datasetBuilder.topicToRow(channelId, topic),
-            seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_TOPICS,
+            PushMessage.replace("topics", ChatDatasetBuilder.TOPIC_COLUMNS,
+                String.valueOf(topic.id()), datasetBuilder.topicToRow(channelId, topic)));
     }
 
     void broadcastTopicRemove(UUID channelId, Long topicId) {
-        broadcast(PushMessage.remove("topics", String.valueOf(topicId), seq.incrementAndGet()));
+        eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_TOPICS,
+            PushMessage.remove("topics", String.valueOf(topicId)));
     }
-
-    private void broadcast(String json) {
-        connections.forEach(c -> c.sendText(json).subscribe().with(
-                ignored -> {},
-                err -> Log.warnf("WebSocket send failed: %s", err.getMessage())));
-    }
-
-
 }

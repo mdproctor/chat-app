@@ -35,7 +35,6 @@ public class ChatAppChannelBackend implements HumanParticipatingChannelBackend {
 
     void onChannelInitialised(@Observes ChannelInitialisedEvent event) {
         registry.registerBackend(event.channelId(), this, "human_participating");
-        broadcaster.registerChannel(event.channelId(), event.channelName());
     }
 
     @Override
@@ -54,6 +53,6 @@ public class ChatAppChannelBackend implements HumanParticipatingChannelBackend {
 
     @Override
     public void close(ChannelRef channel) {
-        broadcaster.deregisterChannel(channel);
+
     }
 }
