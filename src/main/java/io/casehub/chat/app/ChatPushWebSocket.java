@@ -38,7 +38,7 @@ public class ChatPushWebSocket {
                         sendText(connection, PushMessage.event(topic, datasetBuilder.buildSnapshot(topic)));
                     } else {
                         var events = eventStore.replay(topic, since, 10000);
-                        if (!events.isEmpty() && events.get(0).seq() > since + 1) {
+                        if (events.isEmpty() || events.get(0).seq() > since + 1) {
                             sendText(connection, PushMessage.event(topic, datasetBuilder.buildSnapshot(topic)));
                         } else {
                             for (var event : events) {

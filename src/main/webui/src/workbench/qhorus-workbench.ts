@@ -610,7 +610,7 @@ export class QhorusWorkbenchElement extends LitElement {
   }
 
   private _renderConnectionBanner() {
-    if (this._pushStatus === 'connected' || this._pushStatus === 'disconnected') return nothing;
+    if (this._pushStatus === 'connected') return nothing;
     if (this._pushStatus === 'reconnecting') {
       return html`<div class="connection-banner reconnecting">
         <span class="connection-spinner"></span>

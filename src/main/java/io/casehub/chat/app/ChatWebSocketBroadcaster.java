@@ -24,17 +24,6 @@ public class ChatWebSocketBroadcaster {
 
 
 
-    String buildSnapshot() {
-        return PushMessage.batch(
-            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_CHANNELS),
-            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_TOPICS),
-            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_MESSAGES),
-            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_MEMBERS),
-            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_PRESENCE),
-            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_REACTIONS),
-            datasetBuilder.buildSnapshot(ChatDatasetBuilder.TOPIC_COMMITMENTS));
-    }
-
     void pushMessage(ChannelRef channel, OutboundMessage message) {
         var row = datasetBuilder.outboundMessageToRow(channel, message);
         eventBroadcaster.broadcast(ChatDatasetBuilder.TOPIC_MESSAGES,
