@@ -41,10 +41,10 @@ REST/WebSocket endpoints, and casehub-pages frontend.</description>
       <version>0.2-SNAPSHOT</version>
     </dependency>
 
-    <!-- Push protocol -->
+    <!-- Push protocol (pages-push transitive via qhorus-push) -->
     <dependency>
       <groupId>io.casehub</groupId>
-      <artifactId>casehub-pages-push</artifactId>
+      <artifactId>casehub-qhorus-push</artifactId>
       <version>0.2-SNAPSHOT</version>
     </dependency>
 

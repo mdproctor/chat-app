@@ -3,6 +3,7 @@ package io.casehub.chat.app;
 import io.casehub.qhorus.api.channel.Channel;
 import io.casehub.qhorus.api.channel.ChannelCreateRequest;
 import io.casehub.qhorus.api.channel.ChannelManager;
+import io.casehub.qhorus.push.QhorusWebSocketBroadcaster;
 import jakarta.annotation.Priority;
 import jakarta.decorator.Decorator;
 import jakarta.decorator.Delegate;
@@ -19,7 +20,7 @@ public abstract class BroadcastingChannelManager implements ChannelManager {
     ChannelManager delegate;
 
     @Inject
-    ChatWebSocketBroadcaster broadcaster;
+    QhorusWebSocketBroadcaster broadcaster;
 
     @Override
     public Channel create(ChannelCreateRequest request) {
