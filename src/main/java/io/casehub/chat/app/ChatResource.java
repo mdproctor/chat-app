@@ -3,31 +3,23 @@ package io.casehub.chat.app;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.casehub.platform.api.identity.ActorType;
 import io.casehub.platform.api.identity.CurrentPrincipal;
-import io.casehub.qhorus.api.channel.ChannelMembership;
 import io.casehub.qhorus.api.channel.MembershipManager;
 import io.casehub.qhorus.api.channel.PresenceStatus;
 import io.casehub.qhorus.api.channel.PresenceTracker;
-import io.casehub.qhorus.api.channel.ReactionManager;
-import io.casehub.qhorus.api.channel.TopicManager;
 import io.casehub.qhorus.api.message.ArtefactRef;
-import io.casehub.qhorus.api.message.Commitment;
 import io.casehub.qhorus.api.message.ConsumerMessaging;
 import io.casehub.qhorus.api.message.Message;
 import io.casehub.qhorus.api.message.MessageDispatch;
 import io.casehub.qhorus.api.message.MessageType;
-import io.casehub.qhorus.api.message.Reaction;
-import io.casehub.qhorus.api.message.TopicSummary;
-import io.casehub.qhorus.api.store.CommitmentReader;
 import io.casehub.qhorus.api.store.MembershipReader;
-import io.casehub.qhorus.api.store.ReactionReader;
 import io.casehub.qhorus.api.store.TopicReader;
+import io.casehub.qhorus.push.QhorusWebSocketBroadcaster;
 import io.quarkus.security.Authenticated;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.transaction.Transactional;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
@@ -42,7 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-@Path("/api/channels")
+@Path("/api/chat")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 @Authenticated
@@ -52,29 +44,21 @@ import java.util.UUID;
 public class ChatResource {
 
     @Inject
-    ConsumerMessaging        messaging;
+    ConsumerMessaging          messaging;
     @Inject
-    ReactionManager          reactions;
+    PresenceTracker            presence;
     @Inject
-    ReactionReader           reactionReader;
+    MembershipManager          members;
     @Inject
-    PresenceTracker          presence;
+    MembershipReader           memberReader;
     @Inject
-    MembershipManager        members;
+    TopicReader                topicReader;
     @Inject
-    MembershipReader         memberReader;
+    QhorusWebSocketBroadcaster broadcaster;
     @Inject
-    CommitmentReader         commitmentReader;
+    CurrentPrincipal           currentPrincipal;
     @Inject
-    TopicManager             topics;
-    @Inject
-    TopicReader              topicReader;
-    @Inject
-    ChatWebSocketBroadcaster broadcaster;
-    @Inject
-    CurrentPrincipal         currentPrincipal;
-    @Inject
-    ObjectMapper             objectMapper;
+    ObjectMapper               objectMapper;
 
     // --- Messages ---
 
@@ -90,9 +74,9 @@ public class ChatResource {
         var msgType = request.messageType() != null ? request.messageType() : "QUERY";
         var actType = request.actorType() != null ? request.actorType() : "HUMAN";
 
-        List<ArtefactRef> artefactRefs = parseArtefactRefs(request.artefactRefs());
-        String            topicName    = resolveTopicName(channelUuid, request.topicId(), request.topic());
-        String correlationId = "COMMAND".equals(msgType) ? UUID.randomUUID().toString() : null;
+        List<ArtefactRef> artefactRefs  = parseArtefactRefs(request.artefactRefs());
+        String            topicName     = resolveTopicName(channelUuid, request.topicId(), request.topic());
+        String            correlationId = "COMMAND".equals(msgType) ? UUID.randomUUID().toString() : null;
 
         var dispatch = MessageDispatch.builder()
                                       .channelId(channelUuid)
@@ -106,11 +90,11 @@ public class ChatResource {
                                       .topic(topicName)
                                       .build();
 
-        var result = messaging.dispatch(dispatch);
+        var result   = messaging.dispatch(dispatch);
         var response = new java.util.LinkedHashMap<String, Object>();
         response.put("ok", true);
         response.put("messageId", result.messageId());
-        if (result.correlationId() != null) response.put("correlationId", result.correlationId());
+        if (result.correlationId() != null) {response.put("correlationId", result.correlationId());}
         return Response.ok(response).build();
     }
 
@@ -173,65 +157,6 @@ public class ChatResource {
                 "messageId", result.messageId())).build();
     }
 
-    // --- Reactions ---
-
-    @POST
-    @Path("/{channelId}/messages/{messageId}/reactions")
-    public Response addReaction(@PathParam("channelId") String channelId,
-                                @PathParam("messageId") String messageId,
-                                ReactionRequest request) {
-        reactions.react(Long.parseLong(messageId), request.emoji());
-        broadcaster.broadcastReactionAppend(Long.parseLong(messageId), request.emoji());
-        return Response.ok().build();
-    }
-
-    @DELETE
-    @Path("/{channelId}/messages/{messageId}/reactions/{emoji}")
-    public Response removeReaction(@PathParam("channelId") String channelId,
-                                   @PathParam("messageId") String messageId,
-                                   @PathParam("emoji") String emoji) {
-        reactions.unreact(Long.parseLong(messageId), emoji);
-        broadcaster.broadcastReactionRemove(Long.parseLong(messageId), emoji);
-        return Response.ok().build();
-    }
-
-    @GET
-    @Path("/{channelId}/messages/{messageId}/reactions")
-    public List<String> listReactions(@PathParam("channelId") String channelId,
-                                      @PathParam("messageId") String messageId) {
-        return reactionReader.findByMessage(Long.parseLong(messageId)).stream()
-                             .map(Reaction::emoji)
-                             .toList();
-    }
-
-    // --- Members ---
-
-    @GET
-    @Path("/{channelId}/members")
-    public List<ChannelMembership> listMembers(@PathParam("channelId") String channelId) {
-        return memberReader.findByChannel(UUID.fromString(channelId));
-    }
-
-    @POST
-    @Path("/{channelId}/members")
-    public Response addMember(@PathParam("channelId") String channelId,
-                              AddMemberRequest request) {
-        var channelUuid = UUID.fromString(channelId);
-        var membership  = members.join(channelUuid, request.memberId());
-        broadcaster.broadcastMemberAppend(channelUuid, membership);
-        return Response.ok().build();
-    }
-
-    @DELETE
-    @Path("/{channelId}/members/{memberId}")
-    public Response removeMember(@PathParam("channelId") String channelId,
-                                 @PathParam("memberId") String memberId) {
-        var channelUuid = UUID.fromString(channelId);
-        members.leave(channelUuid, memberId);
-        broadcaster.broadcastMemberRemove(channelUuid, memberId);
-        return Response.ok().build();
-    }
-
     // --- Read tracking ---
 
     @PUT
@@ -242,120 +167,6 @@ public class ChatResource {
         var memberId    = currentPrincipal.actorId();
         members.updateLastReadMessageId(channelUuid, memberId, request.lastReadMessageId());
         return Response.ok().build();
-    }
-
-    // --- Commitments ---
-
-    @GET
-    @Path("/{channelId}/commitments")
-    public List<Commitment> listCommitments(@PathParam("channelId") String channelId) {
-        return commitmentReader.findByChannel(UUID.fromString(channelId));
-    }
-
-    // --- Correlation ---
-
-    @GET
-    @Path("/{channelId}/correlation/{correlationId}")
-    public List<Message> correlationChain(@PathParam("channelId") String channelId,
-                                          @PathParam("correlationId") String correlationId) {
-        return messaging.findAllByCorrelationId(correlationId);
-    }
-
-    // --- Topics ---
-
-    @POST
-    @Path("/{channelId}/topics")
-    public Response createTopic(@PathParam("channelId") String channelId,
-                                CreateTopicRequest request) {
-        var channelUuid = UUID.fromString(channelId);
-        var name        = request.name() != null ? request.name().trim() : "";
-        if (name.isEmpty()) {
-            return Response.status(400).entity(Map.of("error", "Topic name must not be empty")).build();
-        }
-        if (name.length() > 100) {
-            return Response.status(400).entity(Map.of("error", "Topic name must be 100 characters or less")).build();
-        }
-        if ("General".equals(name) || "general".equals(name)) {
-            return Response.status(409).entity(Map.of("error", "\"General\" is reserved")).build();
-        }
-        var existing = topicReader.find(channelUuid, name);
-        if (existing.isPresent()) {
-            return Response.status(409).entity(Map.of("error", "Topic already exists")).build();
-        }
-        var topic = topics.create(channelUuid, name);
-        broadcaster.broadcastTopicAppend(channelUuid, topic);
-        return Response.ok(Map.of("id", String.valueOf(topic.id()), "name", topic.name())).build();
-    }
-
-    @GET
-    @Path("/{channelId}/topics")
-    public List<TopicSummary> listTopics(@PathParam("channelId") String channelId) {
-        return topics.listTopics(UUID.fromString(channelId));
-    }
-
-    @PUT
-    @Path("/{channelId}/topics/{topicId}")
-    public Response updateTopic(@PathParam("channelId") String channelId,
-                                @PathParam("topicId") String topicId,
-                                UpdateTopicRequest request) {
-        var channelUuid = UUID.fromString(channelId);
-        var topicLongId = Long.parseLong(topicId);
-        var existing    = topicReader.findById(topicLongId);
-        if (existing.isEmpty()) {
-            return Response.status(404).entity(Map.of("error", "Topic not found")).build();
-        }
-        if (!channelUuid.equals(existing.get().channelId())) {
-            return Response.status(400).entity(Map.of("error", "Topic does not belong to this channel")).build();
-        }
-        if (request.name() != null) {
-            var trimmed = request.name().trim();
-            if (trimmed.isEmpty() || trimmed.length() > 100) {
-                return Response.status(400).entity(Map.of("error", "Invalid topic name")).build();
-            }
-            topics.rename(channelUuid, existing.get().name(), trimmed);
-        }
-        if (request.state() != null) {
-            if ("RESOLVED".equals(request.state())) {
-                topics.resolve(channelUuid, existing.get().name());
-            } else if ("ACTIVE".equals(request.state()) && existing.get().resolved()) {
-                topics.unresolve(channelUuid, existing.get().name());
-            }
-        }
-        var updated = topicReader.findById(topicLongId).orElse(existing.get());
-        broadcaster.broadcastTopicReplace(channelUuid, updated);
-        return Response.ok(Map.of("ok", true)).build();
-    }
-
-    @POST
-    @Path("/{channelId}/topics/{topicId}/merge")
-    public Response mergeTopic(@PathParam("channelId") String channelId,
-                               @PathParam("topicId") String topicId,
-                               MergeTopicRequest request) {
-        var channelUuid   = UUID.fromString(channelId);
-        var sourceTopicId = Long.parseLong(topicId);
-        var source        = topicReader.findById(sourceTopicId);
-        if (source.isEmpty()) {
-            return Response.status(404).entity(Map.of("error", "Source topic not found")).build();
-        }
-        if (!channelUuid.equals(source.get().channelId())) {
-            return Response.status(400).entity(Map.of("error", "Source topic does not belong to this channel")).build();
-        }
-        if ("general".equalsIgnoreCase(source.get().name())) {
-            return Response.status(400).entity(Map.of("error", "Cannot merge the default topic")).build();
-        }
-        var targetTopicId = Long.parseLong(request.targetTopicId());
-        var target        = topicReader.findById(targetTopicId);
-        if (target.isEmpty()) {
-            return Response.status(404).entity(Map.of("error", "Target topic not found")).build();
-        }
-        if (!channelUuid.equals(target.get().channelId())) {
-            return Response.status(400).entity(Map.of("error", "Target topic does not belong to this channel")).build();
-        }
-        topics.merge(channelUuid, source.get().name(), target.get().name());
-        broadcaster.broadcastTopicRemove(channelUuid, sourceTopicId);
-        var updatedTarget = topicReader.findById(targetTopicId).orElse(target.get());
-        broadcaster.broadcastTopicReplace(channelUuid, updatedTarget);
-        return Response.ok(Map.of("ok", true)).build();
     }
 
     // --- Private helpers ---
@@ -372,7 +183,8 @@ public class ChatResource {
         if (p == null || p.status() == PresenceStatus.OFFLINE) {
             presence.heartbeat(PresenceStatus.ONLINE, null);
             broadcaster.broadcastPresenceReplace(memberId, PresenceStatus.ONLINE);
-        }}
+        }
+    }
 
     private String resolveTopicName(UUID channelId, String topicId, String topicName) {
         if (topicId != null && !topicId.isEmpty()) {
@@ -388,7 +200,9 @@ public class ChatResource {
     }
 
     private List<ArtefactRef> parseArtefactRefs(List<Map<String, Object>> raw) {
-        if (raw == null || raw.isEmpty()) {return List.of();}
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
         try {
             var json = objectMapper.writeValueAsString(raw);
             return objectMapper.readValue(json, objectMapper.getTypeFactory()
@@ -404,15 +218,5 @@ public class ChatResource {
                                      String target, List<Map<String, Object>> artefactRefs,
                                      String topic, String topicId) {}
 
-    public record ReactionRequest(String emoji) {}
-
-    public record AddMemberRequest(String memberId) {}
-
     public record MarkReadRequest(Long lastReadMessageId) {}
-
-    public record CreateTopicRequest(String name) {}
-
-    public record UpdateTopicRequest(String name, String state) {}
-
-    public record MergeTopicRequest(String targetTopicId) {}
 }

@@ -14,9 +14,15 @@ if (!window.matchMedia) {
   }));
 }
 
-import './qhorus-workbench.js';
-import type { QhorusChannel, QhorusMessage, ChannelMember, PresenceState, Reaction } from '@casehubio/blocks-ui-channel-activity';
+import type { QhorusMessage, ChannelMember, Reaction } from '@casehubio/blocks-ui-channel-activity';
 import { ChannelEventTopics } from '@casehubio/blocks-ui-channel-activity';
+
+const _origDefine = customElements.define.bind(customElements);
+customElements.define = ((name: string, ctor: CustomElementConstructor, opts?: ElementDefinitionOptions) => {
+  if (!customElements.get(name)) _origDefine(name, ctor, opts);
+}) as typeof customElements.define;
+
+await import('./qhorus-workbench.js');
 
 vi.mock('../auth.js', () => ({
   getToken: () => 'mock-token',
@@ -56,25 +62,25 @@ describe('QhorusWorkbenchElement', () => {
 
   it('renders channel nav component', () => {
     const shadow = element.shadowRoot!;
-    const nav = shadow.querySelector('channel-nav');
+    const nav = shadow.querySelector('blocks-channel-nav');
     expect(nav).toBeTruthy();
   });
 
   it('renders channel feed component', () => {
     const shadow = element.shadowRoot!;
-    const feed = shadow.querySelector('channel-feed');
+    const feed = shadow.querySelector('blocks-channel-feed');
     expect(feed).toBeTruthy();
   });
 
   it('renders message input component', () => {
     const shadow = element.shadowRoot!;
-    const input = shadow.querySelector('channel-input');
+    const input = shadow.querySelector('blocks-channel-input');
     expect(input).toBeTruthy();
   });
 
   it('renders member panel component', () => {
     const shadow = element.shadowRoot!;
-    const panel = shadow.querySelector('channel-member-panel');
+    const panel = shadow.querySelector('blocks-channel-member-panel');
     expect(panel).toBeTruthy();
   });
 
@@ -91,34 +97,40 @@ describe('QhorusWorkbenchElement', () => {
     element.dispatchEvent(event);
     await element.updateComplete;
 
-    expect(element._selectedChannelId).toBe('ch-1');
+    expect(element._channels.selectedChannelId).toBe('ch-1');
   });
 
-  it('filters messages by selected channel', async () => {
-    element._adapter.messages = [
-      { id: 'msg-1', channelId: 'ch-1', sender: 'alice', messageType: 'EVENT', actorType: 'HUMAN', content: 'Hello', topic: 'General', replyCount: 0, artefactRefs: [], createdAt: '2026-07-07T12:00:00Z' },
-      { id: 'msg-2', channelId: 'ch-2', sender: 'bob', messageType: 'EVENT', actorType: 'HUMAN', content: 'Hi', topic: 'General', replyCount: 0, artefactRefs: [], createdAt: '2026-07-07T12:01:00Z' },
-    ];
-    element._selectedChannelId = 'ch-1';
-    element._onDataChange('messages');
+  it('filters messages by selected channel via controller', async () => {
+    element._push.applyOp({
+      op: 'snapshot', dataset: 'messages',
+      rows: [
+        ['ch-1', 'msg-1', null, 'alice', 'Hello', '2026-07-07T12:00:00Z', 'EVENT', 'HUMAN', '', null, '[]', null],
+        ['ch-2', 'msg-2', null, 'bob', 'Hi', '2026-07-07T12:01:00Z', 'EVENT', 'HUMAN', '', null, '[]', null],
+      ],
+    });
+    element._channels.selectedChannelId = 'ch-1';
+    element.requestUpdate();
     await element.updateComplete;
 
-    const feed = element.shadowRoot!.querySelector('channel-feed');
+    const feed = element.shadowRoot!.querySelector('blocks-channel-feed');
     const messages = feed.messages as QhorusMessage[];
     expect(messages.length).toBe(1);
     expect(messages[0].channelId).toBe('ch-1');
   });
 
-  it('filters members by selected channel', async () => {
-    element._adapter.members = [
-      { channelId: 'ch-1', memberId: 'alice', displayName: 'Alice', role: 'PARTICIPANT', actorType: 'HUMAN' },
-      { channelId: 'ch-2', memberId: 'bob', displayName: 'Bob', role: 'PARTICIPANT', actorType: 'HUMAN' },
-    ];
-    element._selectedChannelId = 'ch-1';
-    element._onDataChange('members');
+  it('filters members by selected channel via controller', async () => {
+    element._push.applyOp({
+      op: 'snapshot', dataset: 'members',
+      rows: [
+        ['m-1', 'ch-1', 'alice', 'Alice'],
+        ['m-2', 'ch-2', 'bob', 'Bob'],
+      ],
+    });
+    element._channels.selectedChannelId = 'ch-1';
+    element.requestUpdate();
     await element.updateComplete;
 
-    const panel = element.shadowRoot!.querySelector('channel-member-panel');
+    const panel = element.shadowRoot!.querySelector('blocks-channel-member-panel');
     const members = panel.members as ChannelMember[];
     expect(members.length).toBe(1);
     expect(members[0].channelId).toBe('ch-1');
@@ -150,7 +162,7 @@ describe('QhorusWorkbenchElement', () => {
     element.dispatchEvent(event);
     await element.updateComplete;
 
-    expect(element._replyTo).toEqual({
+    expect(element._messaging.replyTo).toEqual({
       messageId: 'msg-1',
       senderName: 'alice',
     });
@@ -183,43 +195,47 @@ describe('QhorusWorkbenchElement', () => {
     element.dispatchEvent(event);
     await element.updateComplete;
 
-    expect(element._replyTo).toEqual({
+    expect(element._messaging.replyTo).toEqual({
       messageId: 'root-msg-1',
       senderName: 'bob',
     });
   });
 
   it('auto-selects first channel when channels arrive and none selected', async () => {
-    expect(element._selectedChannelId).toBe('');
+    expect(element._channels.selectedChannelId).toBe('');
 
-    element._adapter.channels = [
-      { id: 'ch-1', name: 'general', semantic: 'APPEND', paused: false },
-      { id: 'ch-2', name: 'incidents', semantic: 'APPEND', paused: false },
-    ];
-    element._onDataChange('channels');
+    element._push.applyOp({
+      op: 'snapshot', dataset: 'channels',
+      rows: [
+        ['ch-1', 'general', '', '', 'false'],
+        ['ch-2', 'incidents', '', '', 'false'],
+      ],
+    });
     await element.updateComplete;
 
-    expect(element._selectedChannelId).toBe('ch-1');
+    expect(element._channels.selectedChannelId).toBe('ch-1');
   });
 
   it('does not override selected channel when channels update', async () => {
-    element._selectedChannelId = 'ch-2';
-    element._adapter.channels = [
-      { id: 'ch-1', name: 'general', semantic: 'APPEND', paused: false },
-      { id: 'ch-2', name: 'incidents', semantic: 'APPEND', paused: false },
-    ];
-    element._onDataChange('channels');
+    element._channels.selectedChannelId = 'ch-2';
+    element._push.applyOp({
+      op: 'snapshot', dataset: 'channels',
+      rows: [
+        ['ch-1', 'general', '', '', 'false'],
+        ['ch-2', 'incidents', '', '', 'false'],
+      ],
+    });
     await element.updateComplete;
 
-    expect(element._selectedChannelId).toBe('ch-2');
+    expect(element._channels.selectedChannelId).toBe('ch-2');
   });
 
-  it('calls authenticatedFetch on SEND_MESSAGE event', async () => {
+  it('calls authenticatedFetch on SEND_MESSAGE event with /api/chat path', async () => {
     const { authenticatedFetch } = await import('../auth.js');
     const fetchMock = vi.mocked(authenticatedFetch);
     fetchMock.mockClear();
 
-    element._selectedChannelId = 'ch-1';
+    element._channels.selectedChannelId = 'ch-1';
 
     const event = new CustomEvent('pages-event', {
       detail: {
@@ -234,7 +250,7 @@ describe('QhorusWorkbenchElement', () => {
     await element.updateComplete;
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/channels/ch-1/messages',
+      '/api/chat/ch-1/messages',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ text: 'Test message' }),
@@ -242,7 +258,7 @@ describe('QhorusWorkbenchElement', () => {
     );
   });
 
-  it('calls authenticatedFetch on CREATE_CHANNEL event', async () => {
+  it('calls authenticatedFetch on CREATE_CHANNEL event via controller', async () => {
     const { authenticatedFetch } = await import('../auth.js');
     const fetchMock = vi.mocked(authenticatedFetch);
     fetchMock.mockClear();
@@ -268,7 +284,7 @@ describe('QhorusWorkbenchElement', () => {
     );
   });
 
-  it('calls authenticatedFetch on DELETE_CHANNEL event', async () => {
+  it('calls authenticatedFetch on DELETE_CHANNEL event via controller', async () => {
     const { authenticatedFetch } = await import('../auth.js');
     const fetchMock = vi.mocked(authenticatedFetch);
     fetchMock.mockClear();
@@ -338,7 +354,7 @@ describe('QhorusWorkbenchElement', () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      element._selectedChannelId = 'ch-1';
+      element._channels.selectedChannelId = 'ch-1';
       const event = new CustomEvent('pages-event', {
         detail: {
           topic: ChannelEventTopics.SEND_MESSAGE,
@@ -394,15 +410,15 @@ describe('QhorusWorkbenchElement', () => {
     });
   });
 
-  it('routes REACT event to authenticatedFetch with correct URL', async () => {
+  it('routes REACT event to authenticatedFetch via ReactionController', async () => {
     const { authenticatedFetch } = await import('../auth.js');
     const fetchMock = vi.mocked(authenticatedFetch);
     fetchMock.mockClear();
 
-    element._adapter.messages = [
-      { id: 'msg-1', channelId: 'ch-1', sender: 'alice', messageType: 'EVENT', actorType: 'HUMAN', content: 'Hello', topic: 'General', replyCount: 0, artefactRefs: [], createdAt: '2026-07-07T12:00:00Z' },
-    ];
-    element._onDataChange('messages');
+    element._push.applyOp({
+      op: 'snapshot', dataset: 'messages',
+      rows: [['ch-1', 'msg-1', null, 'alice', 'Hello', '2026-07-07T12:00:00Z', 'EVENT', 'HUMAN', '', null, '[]', null]],
+    });
 
     const event = new CustomEvent('pages-event', {
       detail: {
@@ -423,15 +439,15 @@ describe('QhorusWorkbenchElement', () => {
     );
   });
 
-  it('routes UNREACT event to authenticatedFetch with DELETE and correct URL', async () => {
+  it('routes UNREACT event to authenticatedFetch via ReactionController', async () => {
     const { authenticatedFetch } = await import('../auth.js');
     const fetchMock = vi.mocked(authenticatedFetch);
     fetchMock.mockClear();
 
-    element._adapter.messages = [
-      { id: 'msg-1', channelId: 'ch-1', sender: 'alice', messageType: 'EVENT', actorType: 'HUMAN', content: 'Hello', topic: 'General', replyCount: 0, artefactRefs: [], createdAt: '2026-07-07T12:00:00Z' },
-    ];
-    element._onDataChange('messages');
+    element._push.applyOp({
+      op: 'snapshot', dataset: 'messages',
+      rows: [['ch-1', 'msg-1', null, 'alice', 'Hello', '2026-07-07T12:00:00Z', 'EVENT', 'HUMAN', '', null, '[]', null]],
+    });
 
     const event = new CustomEvent('pages-event', {
       detail: {
@@ -444,12 +460,12 @@ describe('QhorusWorkbenchElement', () => {
 
     await new Promise(r => setTimeout(r, 0));
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/channels/ch-1/messages/msg-1/reactions/👍',
+      '/api/channels/ch-1/messages/msg-1/reactions/%F0%9F%91%8D',
       expect.objectContaining({ method: 'DELETE' })
     );
   });
 
-  it('constructs reply URL with inReplyTo path segment', async () => {
+  it('constructs reply URL with /api/chat path', async () => {
     const { authenticatedFetch } = await import('../auth.js');
     const fetchMock = vi.mocked(authenticatedFetch);
     fetchMock.mockClear();
@@ -465,38 +481,41 @@ describe('QhorusWorkbenchElement', () => {
 
     await new Promise(r => setTimeout(r, 0));
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/channels/ch-1/messages/msg-parent/replies',
+      '/api/chat/ch-1/messages/msg-parent/replies',
       expect.objectContaining({ method: 'POST' })
     );
   });
 
   it('filters reactions to only those belonging to selected channel messages', async () => {
-    element._adapter.messages = [
-      { id: 'msg-1', channelId: 'ch-1', sender: 'alice', messageType: 'EVENT', actorType: 'HUMAN', content: 'Hello', topic: 'General', replyCount: 0, artefactRefs: [], createdAt: '2026-07-07T12:00:00Z' },
-      { id: 'msg-2', channelId: 'ch-2', sender: 'bob', messageType: 'EVENT', actorType: 'HUMAN', content: 'Hi', topic: 'General', replyCount: 0, artefactRefs: [], createdAt: '2026-07-07T12:01:00Z' },
-    ];
-    element._adapter.reactions = [
-      { messageId: 'msg-1', emoji: '👍', actorId: '', createdAt: '' },
-      { messageId: 'msg-2', emoji: '❤️', actorId: '', createdAt: '' },
-    ];
-    element._selectedChannelId = 'ch-1';
-    element._onDataChange('messages');
+    element._push.applyOp({
+      op: 'snapshot', dataset: 'messages',
+      rows: [
+        ['ch-1', 'msg-1', null, 'alice', 'Hello', '2026-07-07T12:00:00Z', 'EVENT', 'HUMAN', '', null, '[]', null],
+        ['ch-2', 'msg-2', null, 'bob', 'Hi', '2026-07-07T12:01:00Z', 'EVENT', 'HUMAN', '', null, '[]', null],
+      ],
+    });
+    element._push.applyOp({
+      op: 'snapshot', dataset: 'reactions',
+      rows: [['msg-1', '👍'], ['msg-2', '❤️']],
+    });
+    element._channels.selectedChannelId = 'ch-1';
+    element.requestUpdate();
     await element.updateComplete;
 
-    const feed = element.shadowRoot!.querySelector('channel-feed');
+    const feed = element.shadowRoot!.querySelector('blocks-channel-feed');
     const reactions = feed.reactions as Reaction[];
     expect(reactions.length).toBe(1);
     expect(reactions[0].messageId).toBe('msg-1');
     expect(reactions[0].emoji).toBe('👍');
   });
 
-  it('clears _replyTo after successful send', async () => {
+  it('clears replyTo after successful send', async () => {
     const { authenticatedFetch } = await import('../auth.js');
     const fetchMock = vi.mocked(authenticatedFetch);
     fetchMock.mockClear();
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
 
-    element._replyTo = { messageId: 'msg-1', senderName: 'alice' };
+    element._messaging.replyTo = { messageId: 'msg-1', senderName: 'alice' };
 
     const event = new CustomEvent('pages-event', {
       detail: {
@@ -508,7 +527,7 @@ describe('QhorusWorkbenchElement', () => {
     element.dispatchEvent(event);
 
     await new Promise(r => setTimeout(r, 0));
-    expect(element._replyTo).toBeUndefined();
+    expect(element._messaging.replyTo).toBeUndefined();
   });
 
   it('cleans up EventConnection on disconnectedCallback', async () => {
@@ -608,37 +627,38 @@ describe('QhorusWorkbenchElement', () => {
   });
 
   describe('layout structure', () => {
-    it('channel-feed fills available space in main panel', async () => {
+    it('blocks-channel-feed fills available space in main panel', async () => {
       const el = await renderWorkbench();
       const styles = (el.constructor as any).styles;
       const cssText = Array.isArray(styles) ? styles.map((s: any) => s.cssText).join('\n') : styles.cssText;
-      expect(cssText).toContain('channel-feed');
-      expect(cssText).toMatch(/channel-feed[^}]*flex:\s*1/);
-      expect(cssText).toMatch(/channel-feed[^}]*min-height:\s*0/);
+      expect(cssText).toContain('blocks-channel-feed');
+      expect(cssText).toMatch(/blocks-channel-feed[^}]*flex:\s*1/);
+      expect(cssText).toMatch(/blocks-channel-feed[^}]*min-height:\s*0/);
     });
 
     it('message-input is pinned to bottom', async () => {
       const el = await renderWorkbench();
       const styles = (el.constructor as any).styles;
       const cssText = Array.isArray(styles) ? styles.map((s: any) => s.cssText).join('\n') : styles.cssText;
-      expect(cssText).toContain('channel-input');
-      expect(cssText).toMatch(/channel-input[^}]*flex-shrink:\s*0/);
+      expect(cssText).toContain('blocks-channel-input');
+      expect(cssText).toMatch(/blocks-channel-input[^}]*flex-shrink:\s*0/);
     });
   });
 
-  it('passes renderContent callback to channel-feed for commitment range bars', async () => {
-    element._adapter.messages = [
-      { id: 'msg-1', channelId: 'ch-1', sender: 'alice', messageType: 'COMMAND', actorType: 'AGENT', content: 'Do this', topic: 'General', replyCount: 0, artefactRefs: [], createdAt: '2026-01-01T00:00:00Z', correlationId: 'corr-1', target: 'bob' },
-    ];
-    element._adapter.commitments = new Map([
-      ['corr-1', { state: 'OPEN', deadline: '2026-02-01T00:00:00Z', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }],
-    ]);
-    element._selectedChannelId = 'ch-1';
-    element._onDataChange('messages');
-    element._onDataChange('commitments');
+  it('passes renderContent callback to blocks-channel-feed for commitment range bars', async () => {
+    element._push.applyOp({
+      op: 'snapshot', dataset: 'messages',
+      rows: [['ch-1', 'msg-1', null, 'alice', 'Do this', '2026-01-01T00:00:00Z', 'COMMAND', 'AGENT', '', 'corr-1', '[]', 'bob']],
+    });
+    element._push.applyOp({
+      op: 'snapshot', dataset: 'commitments',
+      rows: [['corr-1', 'ch-1', 'OPEN', '2026-02-01T00:00:00Z', '', '', '2026-01-01T00:00:00Z']],
+    });
+    element._channels.selectedChannelId = 'ch-1';
+    element.requestUpdate();
     await element.updateComplete;
 
-    const feed = element.shadowRoot!.querySelector('channel-feed');
+    const feed = element.shadowRoot!.querySelector('blocks-channel-feed');
     expect(feed.renderContent).toBeTypeOf('function');
   });
 
