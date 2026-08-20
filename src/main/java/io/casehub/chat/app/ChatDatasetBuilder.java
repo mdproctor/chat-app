@@ -124,7 +124,7 @@ public class ChatDatasetBuilder {
     private String buildChannelSnapshot(Long seq) {
         var channels = channelReader.listAll();
         var rows = channels.stream()
-            .map(ch -> List.of(ch.id().toString(), ch.name(), "",
+            .map(ch -> List.of(ch.id.toString(), ch.name(), "",
                 ch.description() != null ? ch.description() : "", "false"))
             .toList();
         return PushMessage.snapshot("channels", CHANNEL_COLUMNS, rows, seq);
@@ -134,12 +134,12 @@ public class ChatDatasetBuilder {
         var channels = channelReader.listAll();
         var rows = new ArrayList<List<String>>();
         for (var ch : channels) {
-            for (var ts : topicManager.listTopics(ch.id())) {
-                var topic = topicReader.find(ch.id(), ts.name());
-                Long topicId = topic.map(Topic::id).orElse(null);
+            for (var ts : topicManager.listTopics(ch.id)) {
+                var topic = topicReader.find(ch.id, ts.name());
+                Long topicId = topic.map(Topic.id).orElse(null);
                 rows.add(List.of(
                     topicId != null ? String.valueOf(topicId) : ts.name(),
-                    ch.id().toString(), ts.name(),
+                    ch.id.toString(), ts.name(),
                     ts.resolved() ? "RESOLVED" : "ACTIVE",
                     String.valueOf(ts.messageCount()),
                     ts.lastActivityAt() != null ? ts.lastActivityAt().toString() : "",
@@ -153,7 +153,7 @@ public class ChatDatasetBuilder {
         var channels = channelReader.listAll();
         var rows = new ArrayList<List<String>>();
         for (var ch : channels) {
-            for (var msg : messaging.history(ch.id(), 0, 10000)) {
+            for (var msg : messaging.history(ch.id, 0, 10000)) {
                 rows.add(messageToRow(msg));
             }
         }
@@ -164,9 +164,9 @@ public class ChatDatasetBuilder {
         var channels = channelReader.listAll();
         var rows = new ArrayList<List<String>>();
         for (var ch : channels) {
-            for (var m : memberReader.findByChannel(ch.id())) {
-                String membershipId = ch.id().toString() + ":" + m.memberId();
-                rows.add(List.of(membershipId, ch.id().toString(), m.memberId(), m.memberId(), m.role().name()));
+            for (var m : memberReader.findByChannel(ch.id)) {
+                String membershipId = ch.id.toString() + ":" + m.memberId();
+                rows.add(List.of(membershipId, ch.id.toString(), m.memberId(), m.memberId(), m.role().name()));
             }
         }
         return PushMessage.snapshot("members", MEMBER_COLUMNS, rows, seq);
@@ -176,7 +176,7 @@ public class ChatDatasetBuilder {
         var channels = channelReader.listAll();
         var rows = new ArrayList<List<String>>();
         for (var ch : channels) {
-            for (var p : presenceTracker.getChannelPresence(ch.id())) {
+            for (var p : presenceTracker.getChannelPresence(ch.id)) {
                 rows.add(List.of(p.memberId(), p.status().name(),
                     p.lastSeenAt() != null ? p.lastSeenAt().toString() : ""));
             }
@@ -188,8 +188,8 @@ public class ChatDatasetBuilder {
         var channels = channelReader.listAll();
         var rows = new ArrayList<List<String>>();
         for (var ch : channels) {
-            var msgs = messaging.history(ch.id(), 0, 10000);
-            var msgIds = msgs.stream().map(Message::id).toList();
+            var msgs = messaging.history(ch.id, 0, 10000);
+            var msgIds = msgs.stream().map(Message.id).toList();
             if (!msgIds.isEmpty()) {
                 var reactionsMap = reactionReader.findByMessages(msgIds);
                 for (var entry : reactionsMap.entrySet()) {
@@ -206,7 +206,7 @@ public class ChatDatasetBuilder {
         var channels = channelReader.listAll();
         var rows = new ArrayList<List<String>>();
         for (var ch : channels) {
-            for (var c : commitmentReader.findByChannel(ch.id())) {
+            for (var c : commitmentReader.findByChannel(ch.id)) {
                 rows.add(commitmentToRow(c));
             }
         }
@@ -217,7 +217,7 @@ public class ChatDatasetBuilder {
         String topicIdStr = "";
         if (msg.topic() != null && !msg.topic().isEmpty()) {
             var topic = topicReader.find(msg.channelId(), msg.topic());
-            topicIdStr = topic.map(t -> String.valueOf(t.id())).orElse("");
+            topicIdStr = topic.map(t -> String.valueOf(t.id)).orElse("");
         }
         String artefactRefsJson = "[]";
         if (msg.artefactRefs() != null && !msg.artefactRefs().isEmpty()) {
@@ -225,7 +225,7 @@ public class ChatDatasetBuilder {
         }
         var row = new ArrayList<String>(12);
         row.add(msg.channelId().toString());
-        row.add(String.valueOf(msg.id()));
+        row.add(String.valueOf(msg.id));
         row.add(msg.inReplyTo() != null ? String.valueOf(msg.inReplyTo()) : null);
         row.add(msg.sender());
         row.add(msg.content());
@@ -245,7 +245,7 @@ public class ChatDatasetBuilder {
             artefactRefsJson = toJson(message.artefactRefs());
         }
         var row = new ArrayList<String>(12);
-        row.add(channel.id().toString());
+        row.add(channel.id.toString());
         row.add(String.valueOf(message.sequenceId()));
         row.add(message.inReplyTo() != null ? String.valueOf(message.inReplyTo()) : null);
         row.add(message.sender());
@@ -271,7 +271,7 @@ public class ChatDatasetBuilder {
 
     public List<String> topicToRow(java.util.UUID channelId, Topic topic) {
         return List.of(
-            String.valueOf(topic.id()), channelId.toString(), topic.name(),
+            String.valueOf(topic.id), channelId.toString(), topic.name(),
             topic.resolved() ? "RESOLVED" : "ACTIVE",
             "0", topic.createdAt() != null ? topic.createdAt().toString() : "",
             topic.createdAt() != null ? topic.createdAt().toString() : "");

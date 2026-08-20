@@ -22,7 +22,7 @@ public class ChatPushWebSocket {
 
     @OnOpen
     void onOpen(WebSocketConnection connection) {
-        pushInfra.registerConnection(connection.id(), connection);
+        pushInfra.registerConnection(connection.id, connection);
     }
 
     @OnTextMessage
@@ -30,7 +30,7 @@ public class ChatPushWebSocket {
         PushRequest request = PushRequest.parse(message);
         switch (request) {
             case PushRequest.Listen listen -> {
-                topicRegistry.listen(connection.id(), listen.topics());
+                topicRegistry.listen(connection.id, listen.topics());
                 for (var entry : listen.since().entrySet()) {
                     String topic = entry.getKey();
                     long since = entry.getValue();
@@ -49,14 +49,14 @@ public class ChatPushWebSocket {
                 }
             }
             case PushRequest.Unlisten unlisten ->
-                topicRegistry.unlisten(connection.id(), unlisten.topics());
+                topicRegistry.unlisten(connection.id, unlisten.topics());
             default -> Log.debugf("Ignoring push request: %s", request.op());
         }
     }
 
     @OnClose
     void onClose(WebSocketConnection connection) {
-        pushInfra.removeConnection(connection.id());
+        pushInfra.removeConnection(connection.id);
     }
 
     private void sendText(WebSocketConnection connection, String text) {
