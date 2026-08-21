@@ -3,7 +3,8 @@ import path from 'path';
 import fs from 'fs';
 
 const PAGES = path.resolve(__dirname, '../../../../pages/packages');
-const CHANNEL_ACTIVITY = path.resolve(__dirname, '../../../../blocks-ui/components/channel-activity');
+const BLOCKS_UI = path.resolve(__dirname, '../../../../blocks-ui');
+const CHANNEL_ACTIVITY = path.resolve(BLOCKS_UI, 'components/channel-activity');
 const CASEHUB_PKG = path.resolve(__dirname, '.casehub-packages/packages');
 
 const pagesExists = fs.existsSync(path.resolve(PAGES, 'pages-primitives/src'));
@@ -17,9 +18,26 @@ if (pagesExists) {
   }
 }
 
-// blocks-ui channel-activity from source if available
+// blocks-ui packages from source if available
 if (fs.existsSync(path.resolve(CHANNEL_ACTIVITY, 'src'))) {
   aliases.push({ find: '@casehubio/blocks-ui-channel-activity', replacement: path.resolve(CHANNEL_ACTIVITY, 'src') });
+}
+const BLOCKS_CORE = path.resolve(BLOCKS_UI, 'packages/blocks-ui-core');
+if (fs.existsSync(path.resolve(BLOCKS_CORE, 'src'))) {
+  aliases.push({ find: '@casehubio/blocks-ui-core', replacement: path.resolve(BLOCKS_CORE, 'src') });
+}
+const COMMITMENT_VIZ = path.resolve(BLOCKS_UI, 'components/commitment-viz');
+if (fs.existsSync(path.resolve(COMMITMENT_VIZ, 'src'))) {
+  aliases.push({ find: '@casehubio/blocks-ui-commitment-viz/dist', replacement: path.resolve(COMMITMENT_VIZ, 'src') });
+  aliases.push({ find: '@casehubio/blocks-ui-commitment-viz', replacement: COMMITMENT_VIZ });
+}
+// pages packages not in .casehub-packages — resolve from main repo if available
+const PAGES_MAIN = path.resolve(__dirname, '../../../../../../pages/packages');
+for (const pkg of ['pages-table', 'pages-primitives']) {
+  const pkgSrc = path.resolve(PAGES_MAIN, pkg, 'src');
+  if (fs.existsSync(pkgSrc)) {
+    aliases.push({ find: `@casehubio/${pkg}`, replacement: pkgSrc });
+  }
 }
 
 // Packages imported via /src/ subpath need root-level alias (not dist)
@@ -51,30 +69,17 @@ for (const dir of casehubPkgs) {
   } catch {}
 }
 
-const siblingAlias = (find: string, replacement: string) =>
-  fs.existsSync(replacement) ? { find, replacement } : null;
-
-const aliases = [
-  siblingAlias('@casehubio/blocks-ui-channel-activity', path.resolve(CHANNEL_ACTIVITY, 'src')),
-  siblingAlias('@casehubio/blocks-ui-commitment-viz', COMMITMENT_VIZ),
-  siblingAlias('@casehubio/pages-component/dist', path.resolve(PAGES, 'pages-component/src')),
-  siblingAlias('@casehubio/pages-data/dist', path.resolve(PAGES, 'pages-data/src')),
-  siblingAlias('@casehubio/pages-ui/dist', path.resolve(PAGES, 'pages-ui/src')),
-  siblingAlias('@casehubio/pages-viz/dist', path.resolve(PAGES, 'pages-viz/src')),
-  siblingAlias('@casehubio/pages-ui-tokens/dist', path.resolve(PAGES, 'pages-ui-tokens/src')),
-  siblingAlias('@casehubio/blocks-ui-core', path.resolve(BLOCKS, 'blocks-ui-core/src')),
-  siblingAlias('@casehubio/pages-primitives', path.resolve(PAGES, 'pages-primitives/src')),
-  siblingAlias('@casehubio/pages-ui-tokens', path.resolve(PAGES, 'pages-ui-tokens/src')),
-  siblingAlias('@casehubio/pages-component', path.resolve(PAGES, 'pages-component/src')),
-  siblingAlias('@casehubio/pages-data', path.resolve(PAGES, 'pages-data/src')),
-  siblingAlias('@casehubio/pages-runtime', path.resolve(PAGES, 'pages-runtime/src')),
-  siblingAlias('@casehubio/pages-ui', path.resolve(PAGES, 'pages-ui/src')),
-  siblingAlias('@casehubio/pages-viz', path.resolve(PAGES, 'pages-viz/src')),
-].filter(Boolean) as { find: string; replacement: string }[];
-
 export default defineConfig({
   root: 'src',
-  server: { hmr: { overlay: false } },
+  server: {
+    hmr: { overlay: false },
+    proxy: {
+      '/ws': { target: 'http://localhost:8089', ws: true },
+      '/api': { target: 'http://localhost:8089' },
+      '/dev': { target: 'http://localhost:8089' },
+      '/q': { target: 'http://localhost:8089' },
+    },
+  },
   resolve: {
     dedupe: ['lit', '@lit/reactive-element'],
     alias: aliases,
