@@ -25,7 +25,7 @@ import {
 import type { SendMessagePayload, ArtefactRef } from '@casehubio/blocks-ui-channel-activity';
 import type { DockItem, LayoutState } from '@casehubio/pages-component';
 import { createLocalLayoutStore } from '@casehubio/pages-runtime/layout-store.js';
-import { getToken, authenticatedFetch } from '../auth.js';
+import { getToken, getIdentity, authenticatedFetch } from '../auth.js';
 import { applyTheme } from '@casehubio/pages-ui-tokens';
 import { stateCategoryStyles } from '@casehubio/blocks-ui-core';
 import { ARTEFACT_SELECTED } from '../types.js';
@@ -277,6 +277,8 @@ export class QhorusWorkbenchElement extends LitElement {
 
   override firstUpdated() {
     const token = getToken();
+    const identity = getIdentity();
+    if (identity) this._channels.setCurrentUser(identity);
     if (token && this.endpoint) {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = `${proto}//${location.host}/ws/push?token=${token}`;
@@ -387,8 +389,17 @@ export class QhorusWorkbenchElement extends LitElement {
         this._layoutStore.save('workbench', this._layoutState);
       }
     }
-    if (topic === ChannelEventTopics.SELECT_CHANNEL && this._mode === 'phone') {
-      this._drawerOpen = null;
+    if (topic === ChannelEventTopics.SELECT_CHANNEL) {
+      if (this._mode === 'phone') this._drawerOpen = null;
+      const { channelId } = payload as { channelId: string };
+      const latestId = this._channels.latestMessageId(channelId);
+      if (latestId) {
+        authenticatedFetch(`/api/chat/${channelId}/read`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lastReadMessageId: latestId }),
+        }).catch(() => {});
+      }
     }
   };
 
@@ -458,7 +469,7 @@ export class QhorusWorkbenchElement extends LitElement {
     return html`
       ${this._renderIdentity()}
       <blocks-channel-nav
-        .channels=${this._channels.channels}
+        .channelTree=${this._channels.channelTree}
         .selectedChannelId=${this._channels.selectedChannelId}>
       </blocks-channel-nav>
     `;

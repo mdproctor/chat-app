@@ -4,6 +4,16 @@
 -- commitments, correlation chains, reactions.
 
 -- =========================================================================
+-- Spaces (3 root-level case spaces)
+-- =========================================================================
+INSERT INTO space (id, name, description, tenancy_id, created_at)
+VALUES ('aa000000-0000-0000-0000-000000000001', 'Case Alpha', 'Primary demo case', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO space (id, name, description, tenancy_id, created_at)
+VALUES ('aa000000-0000-0000-0000-000000000002', 'Case Beta', 'Secondary demo case', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO space (id, name, description, tenancy_id, created_at)
+VALUES ('aa000000-0000-0000-0000-000000000003', 'Case Gamma', 'Tertiary demo case', 'chat-app', CURRENT_TIMESTAMP);
+
+-- =========================================================================
 -- Channels
 -- =========================================================================
 INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, created_at, last_activity_at)
@@ -14,6 +24,27 @@ INSERT INTO channel (id, name, description, semantic, paused, auto_created, tena
 VALUES ('550e8400-e29b-41d4-a716-446655440003', 'design', 'Design reviews and feedback', 'APPEND', false, false, 'chat-app', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, created_at, last_activity_at)
 VALUES ('550e8400-e29b-41d4-a716-446655440004', 'random', 'Water cooler', 'APPEND', false, false, 'chat-app', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+-- Case Alpha channels (normative triple)
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440011', 'alpha-work', 'Alpha case work channel', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440012', 'alpha-observe', 'Alpha case observation channel', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440013', 'alpha-oversight', 'Alpha case oversight channel', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+-- Case Beta channels (normative triple)
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440021', 'beta-work', 'Beta case work channel', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440022', 'beta-observe', 'Beta case observation channel', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440023', 'beta-oversight', 'Beta case oversight channel', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000002', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+-- Case Gamma channels (normative triple)
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440031', 'gamma-work', 'Gamma case work channel', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000003', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440032', 'gamma-observe', 'Gamma case observation channel', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000003', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440033', 'gamma-oversight', 'Gamma case oversight channel', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000003', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 -- =========================================================================
 -- Topics
@@ -180,3 +211,39 @@ INSERT INTO reaction (message_id, emoji, actor_id, tenancy_id, created_at) VALUE
 INSERT INTO reaction (message_id, emoji, actor_id, tenancy_id, created_at) VALUES (25, 'coffee', 'charlie', 'chat-app', CURRENT_TIMESTAMP - INTERVAL '83' MINUTE);
 INSERT INTO reaction (message_id, emoji, actor_id, tenancy_id, created_at) VALUES (27, 'heart', 'alice', 'chat-app', CURRENT_TIMESTAMP - INTERVAL '74' MINUTE);
 INSERT INTO reaction (message_id, emoji, actor_id, tenancy_id, created_at) VALUES (27, 'heart', 'bob', 'chat-app', CURRENT_TIMESTAMP - INTERVAL '73' MINUTE);
+
+-- =========================================================================
+-- Space channel memberships
+-- =========================================================================
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440011', 'alice', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440011', 'bob', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440012', 'alice', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440012', 'charlie', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440013', 'alice', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440021', 'bob', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440021', 'charlie', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440022', 'bob', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440023', 'bob', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440031', 'alice', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440032', 'alice', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+INSERT INTO channel_membership (channel_id, member_id, member_role, tenancy_id, joined_at) VALUES ('550e8400-e29b-41d4-a716-446655440033', 'charlie', 'PARTICIPANT', 'chat-app', CURRENT_TIMESTAMP);
+
+-- =========================================================================
+-- Space channel messages (produce non-zero unread counts)
+-- =========================================================================
+INSERT INTO message (id, channel_id, sender, message_type, content, actor_type, tenancy_id, created_at)
+VALUES (28, '550e8400-e29b-41d4-a716-446655440011', 'alice', 'QUERY', 'Alpha case intake: new referral from the Smith family.', 'HUMAN', 'chat-app', CURRENT_TIMESTAMP - INTERVAL '50' MINUTE);
+INSERT INTO message (id, channel_id, sender, message_type, content, actor_type, tenancy_id, created_at)
+VALUES (29, '550e8400-e29b-41d4-a716-446655440011', 'bob', 'RESPONSE', 'Acknowledged. Starting initial assessment this afternoon.', 'HUMAN', 'chat-app', CURRENT_TIMESTAMP - INTERVAL '45' MINUTE);
+INSERT INTO message (id, channel_id, sender, message_type, content, actor_type, tenancy_id, created_at)
+VALUES (30, '550e8400-e29b-41d4-a716-446655440012', 'charlie', 'STATUS', 'Home visit completed. Three risk factors identified — see attached notes.', 'HUMAN', 'chat-app', CURRENT_TIMESTAMP - INTERVAL '30' MINUTE);
+INSERT INTO message (id, channel_id, sender, message_type, content, actor_type, tenancy_id, created_at)
+VALUES (31, '550e8400-e29b-41d4-a716-446655440012', 'alice', 'RESPONSE', 'Thanks Charlie. Scheduling multi-agency review for tomorrow.', 'HUMAN', 'chat-app', CURRENT_TIMESTAMP - INTERVAL '25' MINUTE);
+INSERT INTO message (id, channel_id, sender, message_type, content, actor_type, tenancy_id, created_at)
+VALUES (32, '550e8400-e29b-41d4-a716-446655440012', 'charlie', 'RESPONSE', 'Confirmed. I will prepare the chronology for the review panel.', 'HUMAN', 'chat-app', CURRENT_TIMESTAMP - INTERVAL '20' MINUTE);
+INSERT INTO message (id, channel_id, sender, message_type, content, actor_type, tenancy_id, created_at)
+VALUES (33, '550e8400-e29b-41d4-a716-446655440021', 'bob', 'QUERY', 'Beta case: follow-up assessment due next week. Any blockers?', 'HUMAN', 'chat-app', CURRENT_TIMESTAMP - INTERVAL '15' MINUTE);
+INSERT INTO message (id, channel_id, sender, message_type, content, actor_type, tenancy_id, created_at)
+VALUES (34, '550e8400-e29b-41d4-a716-446655440021', 'charlie', 'RESPONSE', 'No blockers. Contact details confirmed with the family.', 'HUMAN', 'chat-app', CURRENT_TIMESTAMP - INTERVAL '10' MINUTE);
+INSERT INTO message (id, channel_id, sender, message_type, content, actor_type, tenancy_id, created_at)
+VALUES (35, '550e8400-e29b-41d4-a716-446655440031', 'alice', 'QUERY', 'Gamma case: initial screening complete. Proceeding to full assessment.', 'HUMAN', 'chat-app', CURRENT_TIMESTAMP - INTERVAL '5' MINUTE);
