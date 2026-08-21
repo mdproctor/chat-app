@@ -13,3 +13,7 @@ dist/
 src/main/webui/test-results/
 .mvn/maven.config
 .mvn/slot-settings.xml
+.worktrees
+.worktrees/
+.claude
+.claude/
