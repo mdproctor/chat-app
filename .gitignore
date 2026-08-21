@@ -17,3 +17,4 @@ src/main/webui/test-results/
 .worktrees/
 .claude
 .claude/
+.quinoa
