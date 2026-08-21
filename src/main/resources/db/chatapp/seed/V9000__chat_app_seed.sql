@@ -4,8 +4,10 @@
 -- commitments, correlation chains, reactions.
 
 -- =========================================================================
--- Spaces (3 root-level case spaces)
+-- Spaces (default + 3 case spaces)
 -- =========================================================================
+INSERT INTO space (id, name, description, tenancy_id, created_at)
+VALUES ('aa000000-0000-0000-0000-000000000000', 'Team', 'Default space for organisation-wide channels', 'chat-app', CURRENT_TIMESTAMP);
 INSERT INTO space (id, name, description, tenancy_id, created_at)
 VALUES ('aa000000-0000-0000-0000-000000000001', 'Case Alpha', 'Primary demo case', 'chat-app', CURRENT_TIMESTAMP);
 INSERT INTO space (id, name, description, tenancy_id, created_at)
@@ -16,14 +18,14 @@ VALUES ('aa000000-0000-0000-0000-000000000003', 'Case Gamma', 'Tertiary demo cas
 -- =========================================================================
 -- Channels
 -- =========================================================================
-INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, created_at, last_activity_at)
-VALUES ('550e8400-e29b-41d4-a716-446655440001', 'general', 'Team announcements and discussion', 'APPEND', false, false, 'chat-app', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, created_at, last_activity_at)
-VALUES ('550e8400-e29b-41d4-a716-446655440002', 'engineering', 'Engineering coordination', 'APPEND', false, false, 'chat-app', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, created_at, last_activity_at)
-VALUES ('550e8400-e29b-41d4-a716-446655440003', 'design', 'Design reviews and feedback', 'APPEND', false, false, 'chat-app', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, created_at, last_activity_at)
-VALUES ('550e8400-e29b-41d4-a716-446655440004', 'random', 'Water cooler', 'APPEND', false, false, 'chat-app', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440001', 'general', 'Team announcements and discussion', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000000', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440002', 'engineering', 'Engineering coordination', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000000', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440003', 'design', 'Design reviews and feedback', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000000', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
+VALUES ('550e8400-e29b-41d4-a716-446655440004', 'random', 'Water cooler', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000000', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 -- Case Alpha channels (normative triple)
 INSERT INTO channel (id, name, description, semantic, paused, auto_created, tenancy_id, space_id, created_at, last_activity_at)
 VALUES ('550e8400-e29b-41d4-a716-446655440011', 'alpha-work', 'Alpha case work channel', 'APPEND', false, false, 'chat-app', 'aa000000-0000-0000-0000-000000000001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
