@@ -22,7 +22,10 @@ import {
   ChannelCorrelationPanelElement,
   renderMarkdown,
 } from '@casehubio/blocks-ui-channel-activity';
-import type { SendMessagePayload, ArtefactRef } from '@casehubio/blocks-ui-channel-activity';
+import type {
+  SendMessagePayload, ArtefactRef, CreateSpacePayload, RenameSpacePayload,
+  DeleteSpacePayload, MoveChannelToSpacePayload, CreateChannelPayload, DeleteChannelPayload,
+} from '@casehubio/blocks-ui-channel-activity';
 import type { DockItem, LayoutState } from '@casehubio/pages-component';
 import { createLocalLayoutStore } from '@casehubio/pages-runtime/layout-store.js';
 import { getToken, getIdentity, authenticatedFetch } from '../auth.js';
@@ -70,6 +73,8 @@ export class QhorusWorkbenchElement extends LitElement {
   @state() private _drawerOpen: string | null = null;
   @state() private _darkMode = false;
   @state() private _selectedArtefactRef?: ArtefactRef;
+  @state() private _errorMessage = '';
+  private _errorTimeout?: ReturnType<typeof setTimeout>;
 
   private static readonly DOCK_ITEMS: DockItem[] = [
     { icon: '💬', label: 'Channels', panelId: 'nav', defaultOpen: true },
@@ -254,6 +259,12 @@ export class QhorusWorkbenchElement extends LitElement {
       animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .error-banner {
+      padding: 6px 12px; font-size: 12px; font-weight: 500;
+      background: var(--pages-danger-3, #fee2e2);
+      color: var(--pages-danger-11, #991b1b);
+      flex-shrink: 0;
+    }
   `;
 
   configure(props: Record<string, unknown>) {
@@ -365,12 +376,95 @@ export class QhorusWorkbenchElement extends LitElement {
 
   private _closeDrawer() { this._drawerOpen = null; }
 
+  private _showError(message: string) {
+    this._errorMessage = message;
+    if (this._errorTimeout) clearTimeout(this._errorTimeout);
+    this._errorTimeout = setTimeout(() => { this._errorMessage = ''; }, 5000);
+  }
+
+  private async _createSpace(payload: CreateSpacePayload) {
+    try {
+      const res = await authenticatedFetch('/api/spaces', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: payload.name }),
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Unknown error'); }
+      const space = await res.json();
+      this._channels.addPendingSpace({ id: space.id, name: space.name });
+    } catch (e) { this._showError(`Failed to create space: ${(e as Error).message}`); }
+  }
+
+  private async _renameSpace(payload: RenameSpacePayload) {
+    try {
+      const res = await authenticatedFetch(`/api/spaces/${payload.spaceId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: payload.newName }),
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Unknown error'); }
+      this._channels.applyRenameSpace(payload.spaceId, payload.newName);
+    } catch (e) { this._showError(`Failed to rename space: ${(e as Error).message}`); }
+  }
+
+  private async _deleteSpace(payload: DeleteSpacePayload) {
+    try {
+      const res = await authenticatedFetch(`/api/spaces/${payload.spaceId}?reassign=true`, { method: 'DELETE' });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Unknown error'); }
+      this._channels.applyDeleteSpace(payload.spaceId);
+    } catch (e) { this._showError(`Failed to delete space: ${(e as Error).message}`); }
+  }
+
+  private async _moveChannelToSpace(payload: MoveChannelToSpacePayload) {
+    try {
+      const res = await authenticatedFetch(`/api/channels/${payload.channelId}/space`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spaceId: payload.spaceId }),
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Unknown error'); }
+      const spaceName = payload.spaceId
+        ? this._channels.channelTree.spaces.find(s => s.space.id === payload.spaceId)?.space.name ?? null
+        : null;
+      this._channels.applyMoveChannel(payload.channelId, payload.spaceId, spaceName);
+    } catch (e) { this._showError(`Failed to move channel: ${(e as Error).message}`); }
+  }
+
+  private async _createChannel(payload: CreateChannelPayload) {
+    try {
+      const body: Record<string, unknown> = { name: payload.name };
+      if (payload.description) body.description = payload.description;
+      if (payload.spaceId) body.spaceId = payload.spaceId;
+      if (payload.semantic) body.semantic = payload.semantic;
+      const res = await authenticatedFetch('/api/channels', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Unknown error'); }
+    } catch (e) { this._showError(`Failed to create channel: ${(e as Error).message}`); }
+  }
+
+  private async _deleteChannel(payload: DeleteChannelPayload) {
+    try {
+      const res = await authenticatedFetch(`/api/channels/${payload.channelId}`, { method: 'DELETE' });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Unknown error'); }
+    } catch (e) { this._showError(`Failed to delete channel: ${(e as Error).message}`); }
+  }
+
   private _onChatEvent = (e: CustomEvent) => {
     const { topic, payload } = e.detail;
 
-    // Message posting uses /api/chat (ChatResource), not /api/channels (qhorus)
     if (topic === ChannelEventTopics.SEND_MESSAGE) {
       this._sendMessage(payload as SendMessagePayload);
+    } else if (topic === ChannelEventTopics.CREATE_SPACE) {
+      this._createSpace(payload as CreateSpacePayload);
+    } else if (topic === ChannelEventTopics.RENAME_SPACE) {
+      this._renameSpace(payload as RenameSpacePayload);
+    } else if (topic === ChannelEventTopics.DELETE_SPACE) {
+      this._deleteSpace(payload as DeleteSpacePayload);
+    } else if (topic === ChannelEventTopics.MOVE_CHANNEL_TO_SPACE) {
+      this._moveChannelToSpace(payload as MoveChannelToSpacePayload);
+    } else if (topic === ChannelEventTopics.CREATE_CHANNEL) {
+      this._createChannel(payload as CreateChannelPayload);
+    } else if (topic === ChannelEventTopics.DELETE_CHANNEL) {
+      this._deleteChannel(payload as DeleteChannelPayload);
     } else {
       this._channels.handleEvent(topic, payload);
       this._messaging.handleEvent(topic, payload);
@@ -378,7 +472,6 @@ export class QhorusWorkbenchElement extends LitElement {
       this._commitments.handleEvent(topic, payload);
     }
 
-    // App-specific: artifact panel, drawer close on channel select
     if (topic === ARTEFACT_SELECTED) {
       this._selectedArtefactRef = (payload as { artefactRef: ArtefactRef }).artefactRef;
       if (!this._isDockOpen('artifacts') && this._mode === 'desktop') {
@@ -502,6 +595,7 @@ export class QhorusWorkbenchElement extends LitElement {
     const defaultTopic = channelTopics.find(t => t.name === 'General');
     const currentTopic = selectedTopic ?? defaultTopic;
     return html`
+      ${this._errorMessage ? html`<div class="error-banner">${this._errorMessage}</div>` : nothing}
       ${this._renderConnectionBanner()}
       ${showTopics ? html`
         <blocks-channel-topic-bar

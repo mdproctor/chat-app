@@ -369,11 +369,10 @@ describe('QhorusWorkbenchElement', () => {
       errorSpy.mockRestore();
     });
 
-    it('catches _createChannel error without unhandled rejection', async () => {
+    it('catches _createChannel error and shows error banner', async () => {
       const { authenticatedFetch } = await import('../auth.js');
       const fetchMock = vi.mocked(authenticatedFetch);
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const event = new CustomEvent('pages-event', {
         detail: {
@@ -385,15 +384,13 @@ describe('QhorusWorkbenchElement', () => {
       element.dispatchEvent(event);
 
       await new Promise(r => setTimeout(r, 0));
-      expect(errorSpy).toHaveBeenCalledWith('Failed to create channel:', expect.any(Error));
-      errorSpy.mockRestore();
+      expect(element._errorMessage).toContain('Failed to create channel');
     });
 
-    it('catches _deleteChannel error without unhandled rejection', async () => {
+    it('catches _deleteChannel error and shows error banner', async () => {
       const { authenticatedFetch } = await import('../auth.js');
       const fetchMock = vi.mocked(authenticatedFetch);
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const event = new CustomEvent('pages-event', {
         detail: {
@@ -405,8 +402,161 @@ describe('QhorusWorkbenchElement', () => {
       element.dispatchEvent(event);
 
       await new Promise(r => setTimeout(r, 0));
-      expect(errorSpy).toHaveBeenCalledWith('Failed to delete channel:', expect.any(Error));
-      errorSpy.mockRestore();
+      expect(element._errorMessage).toContain('Failed to delete channel');
+    });
+  });
+
+  describe('space CRUD operations', () => {
+    it('CREATE_SPACE triggers POST /api/spaces and addPendingSpace', async () => {
+      const { authenticatedFetch } = await import('../auth.js');
+      const fetchMock = vi.mocked(authenticatedFetch);
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ id: 'sp-1', name: 'New Space' }), { status: 200 }));
+
+      const event = new CustomEvent('pages-event', {
+        detail: {
+          topic: ChannelEventTopics.CREATE_SPACE,
+          payload: { name: 'New Space' },
+        },
+        bubbles: true, composed: true,
+      });
+      element.dispatchEvent(event);
+
+      await new Promise(r => setTimeout(r, 0));
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/spaces',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ name: 'New Space' }),
+        })
+      );
+    });
+
+    it('RENAME_SPACE triggers PUT /api/spaces/{id}', async () => {
+      const { authenticatedFetch } = await import('../auth.js');
+      const fetchMock = vi.mocked(authenticatedFetch);
+      fetchMock.mockClear();
+
+      const event = new CustomEvent('pages-event', {
+        detail: {
+          topic: ChannelEventTopics.RENAME_SPACE,
+          payload: { spaceId: 'sp-1', newName: 'Renamed' },
+        },
+        bubbles: true, composed: true,
+      });
+      element.dispatchEvent(event);
+
+      await new Promise(r => setTimeout(r, 0));
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/spaces/sp-1',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ name: 'Renamed' }),
+        })
+      );
+    });
+
+    it('DELETE_SPACE triggers DELETE /api/spaces/{id}?reassign=true', async () => {
+      const { authenticatedFetch } = await import('../auth.js');
+      const fetchMock = vi.mocked(authenticatedFetch);
+      fetchMock.mockClear();
+
+      const event = new CustomEvent('pages-event', {
+        detail: {
+          topic: ChannelEventTopics.DELETE_SPACE,
+          payload: { spaceId: 'sp-1' },
+        },
+        bubbles: true, composed: true,
+      });
+      element.dispatchEvent(event);
+
+      await new Promise(r => setTimeout(r, 0));
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/spaces/sp-1?reassign=true',
+        expect.objectContaining({ method: 'DELETE' })
+      );
+    });
+
+    it('MOVE_CHANNEL_TO_SPACE triggers PUT /api/channels/{id}/space', async () => {
+      const { authenticatedFetch } = await import('../auth.js');
+      const fetchMock = vi.mocked(authenticatedFetch);
+      fetchMock.mockClear();
+
+      const event = new CustomEvent('pages-event', {
+        detail: {
+          topic: ChannelEventTopics.MOVE_CHANNEL_TO_SPACE,
+          payload: { channelId: 'ch-1', spaceId: 'sp-2' },
+        },
+        bubbles: true, composed: true,
+      });
+      element.dispatchEvent(event);
+
+      await new Promise(r => setTimeout(r, 0));
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/channels/ch-1/space',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ spaceId: 'sp-2' }),
+        })
+      );
+    });
+
+    it('CREATE_CHANNEL with spaceId includes spaceId in POST body', async () => {
+      const { authenticatedFetch } = await import('../auth.js');
+      const fetchMock = vi.mocked(authenticatedFetch);
+      fetchMock.mockClear();
+
+      const event = new CustomEvent('pages-event', {
+        detail: {
+          topic: ChannelEventTopics.CREATE_CHANNEL,
+          payload: { name: 'in-space', spaceId: 'sp-1' },
+        },
+        bubbles: true, composed: true,
+      });
+      element.dispatchEvent(event);
+
+      await new Promise(r => setTimeout(r, 0));
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/channels',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ name: 'in-space', spaceId: 'sp-1' }),
+        })
+      );
+    });
+
+    it('failed space operation sets _errorMessage', async () => {
+      const { authenticatedFetch } = await import('../auth.js');
+      const fetchMock = vi.mocked(authenticatedFetch);
+      fetchMock.mockRejectedValueOnce(new Error('Server down'));
+
+      const event = new CustomEvent('pages-event', {
+        detail: {
+          topic: ChannelEventTopics.CREATE_SPACE,
+          payload: { name: 'fail-space' },
+        },
+        bubbles: true, composed: true,
+      });
+      element.dispatchEvent(event);
+
+      await new Promise(r => setTimeout(r, 0));
+      expect(element._errorMessage).toContain('Failed to create space');
+    });
+
+    it('error banner renders when _errorMessage is set', async () => {
+      element._errorMessage = 'Test error';
+      await element.updateComplete;
+
+      const banner = element.shadowRoot!.querySelector('.error-banner');
+      expect(banner).toBeTruthy();
+      expect(banner!.textContent).toContain('Test error');
+    });
+
+    it('error banner does not render when _errorMessage is empty', async () => {
+      element._errorMessage = '';
+      await element.updateComplete;
+
+      const banner = element.shadowRoot!.querySelector('.error-banner');
+      expect(banner).toBeFalsy();
     });
   });
 
