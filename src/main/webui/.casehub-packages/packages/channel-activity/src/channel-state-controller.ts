@@ -88,6 +88,13 @@ export class ChannelStateController implements ReactiveController {
     this.removePendingSpace(spaceId);
   }
 
+  applyReorder(channelId: string, position: number) {
+    this.channels = this.channels.map(ch =>
+      ch.id === channelId ? { ...ch, position } as typeof ch : ch
+    );
+    this._host.requestUpdate();
+  }
+
   get channelTree(): ChannelTree {
     const spaceMap = new Map<string, { space: Space; channels: QhorusChannel[]; children: SpaceNode[] }>();
     for (const s of this.spaces) {
@@ -111,6 +118,15 @@ export class ChannelStateController implements ReactiveController {
       } else {
         ungrouped.push(ch);
       }
+    }
+
+    for (const node of spaceMap.values()) {
+      node.channels.sort((a, b) => {
+        const pa = a.position ?? Number.MAX_SAFE_INTEGER;
+        const pb = b.position ?? Number.MAX_SAFE_INTEGER;
+        if (pa !== pb) return pa - pb;
+        return a.name.localeCompare(b.name);
+      });
     }
 
     const roots: SpaceNode[] = [];
@@ -219,6 +235,8 @@ export class ChannelStateController implements ReactiveController {
     if (spaceName) (ch as { spaceName: string }).spaceName = spaceName;
     if (parentSpaceId) (ch as { parentSpaceId: string }).parentSpaceId = parentSpaceId;
     if (unreadCount) (ch as { unreadCount: number }).unreadCount = parseInt(unreadCount, 10) || 0;
+    const position = row[9] as string;
+    if (position) (ch as { position: number }).position = parseInt(position, 10) || 0;
     return ch;
   }
 

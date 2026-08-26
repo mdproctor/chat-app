@@ -799,6 +799,44 @@ describe('ChannelStateController', () => {
     });
   });
 
+  describe('channel position', () => {
+    it('parses position from row index 9', () => {
+      const { push, ctrl } = createPair();
+      push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'alpha', '', '', 'false', '', '', '', '', '500']],
+      });
+      expect((ctrl.channels[0] as any).position).toBe(500);
+    });
+
+    it('sorts channels within space by position (null last)', () => {
+      const { push, ctrl } = createPair();
+      push.applyOp({ op: 'snapshot', dataset: 'spaces', rows: [spaceRow('sp-1', 'Alpha')] });
+      push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [
+          ['ch-a', 'charlie', '', '', 'false', 'sp-1', 'Alpha', '', '', '2000'],
+          ['ch-b', 'alpha', '', '', 'false', 'sp-1', 'Alpha', '', '', '1000'],
+          ['ch-c', 'bravo', '', '', 'false', 'sp-1', 'Alpha', '', '', ''],
+        ],
+      });
+      const tree = ctrl.channelTree;
+      expect(tree.spaces[0]!.channels[0]!.id).toBe('ch-b');
+      expect(tree.spaces[0]!.channels[1]!.id).toBe('ch-a');
+      expect(tree.spaces[0]!.channels[2]!.id).toBe('ch-c');
+    });
+
+    it('applyReorder updates channel position', () => {
+      const { push, ctrl } = createPair();
+      push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'work', '', '', 'false', '', '', '', '', '1000']],
+      });
+      ctrl.applyReorder('ch-1', 500);
+      expect((ctrl.channels[0] as any).position).toBe(500);
+    });
+  });
+
   describe('host updates', () => {
     it('triggers host update on channel snapshot', () => {
       const { host, push } = createPair();
