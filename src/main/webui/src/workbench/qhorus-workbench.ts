@@ -25,6 +25,7 @@ import {
 import type {
   SendMessagePayload, ArtefactRef, CreateSpacePayload, RenameSpacePayload,
   DeleteSpacePayload, MoveChannelToSpacePayload, CreateChannelPayload, DeleteChannelPayload,
+  ReorderChannelPayload,
 } from '@casehubio/blocks-ui-channel-activity';
 import type { DockItem, LayoutState } from '@casehubio/pages-component';
 import { createLocalLayoutStore } from '@casehubio/pages-runtime/layout-store.js';
@@ -415,15 +416,18 @@ export class QhorusWorkbenchElement extends LitElement {
 
   private async _moveChannelToSpace(payload: MoveChannelToSpacePayload) {
     try {
+      const body: Record<string, unknown> = { spaceId: payload.spaceId };
+      if (payload.position != null) body.position = payload.position;
       const res = await authenticatedFetch(`/api/channels/${payload.channelId}/space`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spaceId: payload.spaceId }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Unknown error'); }
       const spaceName = payload.spaceId
         ? this._channels.channelTree.spaces.find(s => s.space.id === payload.spaceId)?.space.name ?? null
         : null;
       this._channels.applyMoveChannel(payload.channelId, payload.spaceId, spaceName);
+      if (payload.position != null) this._channels.applyReorder(payload.channelId, payload.position);
     } catch (e) { this._showError(`Failed to move channel: ${(e as Error).message}`); }
   }
 
@@ -448,6 +452,17 @@ export class QhorusWorkbenchElement extends LitElement {
     } catch (e) { this._showError(`Failed to delete channel: ${(e as Error).message}`); }
   }
 
+  private async _reorderChannel(payload: ReorderChannelPayload) {
+    try {
+      const res = await authenticatedFetch(`/api/channels/${payload.channelId}/space`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spaceId: payload.spaceId, position: payload.position }),
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? 'Unknown error'); }
+      this._channels.applyReorder(payload.channelId, payload.position);
+    } catch (e) { this._showError(`Failed to reorder channel: ${(e as Error).message}`); }
+  }
+
   private _onChatEvent = (e: CustomEvent) => {
     const { topic, payload } = e.detail;
 
@@ -465,6 +480,8 @@ export class QhorusWorkbenchElement extends LitElement {
       this._createChannel(payload as CreateChannelPayload);
     } else if (topic === ChannelEventTopics.DELETE_CHANNEL) {
       this._deleteChannel(payload as DeleteChannelPayload);
+    } else if (topic === ChannelEventTopics.REORDER_CHANNEL) {
+      this._reorderChannel(payload as ReorderChannelPayload);
     } else {
       this._channels.handleEvent(topic, payload);
       this._messaging.handleEvent(topic, payload);

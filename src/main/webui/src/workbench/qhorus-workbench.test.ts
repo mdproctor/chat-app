@@ -560,6 +560,56 @@ describe('QhorusWorkbenchElement', () => {
     });
   });
 
+  describe('channel reorder', () => {
+    it('REORDER_CHANNEL triggers PUT /api/channels/{id}/space with position', async () => {
+      const { authenticatedFetch } = await import('../auth.js');
+      const fetchMock = vi.mocked(authenticatedFetch);
+      fetchMock.mockClear();
+
+      const event = new CustomEvent('pages-event', {
+        detail: {
+          topic: ChannelEventTopics.REORDER_CHANNEL,
+          payload: { channelId: 'ch-1', spaceId: 'sp-1', position: 1500 },
+        },
+        bubbles: true, composed: true,
+      });
+      element.dispatchEvent(event);
+
+      await new Promise(r => setTimeout(r, 0));
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/channels/ch-1/space',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ spaceId: 'sp-1', position: 1500 }),
+        })
+      );
+    });
+
+    it('MOVE_CHANNEL_TO_SPACE with position includes position in body', async () => {
+      const { authenticatedFetch } = await import('../auth.js');
+      const fetchMock = vi.mocked(authenticatedFetch);
+      fetchMock.mockClear();
+
+      const event = new CustomEvent('pages-event', {
+        detail: {
+          topic: ChannelEventTopics.MOVE_CHANNEL_TO_SPACE,
+          payload: { channelId: 'ch-1', spaceId: 'sp-2', position: 500 },
+        },
+        bubbles: true, composed: true,
+      });
+      element.dispatchEvent(event);
+
+      await new Promise(r => setTimeout(r, 0));
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/channels/ch-1/space',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ spaceId: 'sp-2', position: 500 }),
+        })
+      );
+    });
+  });
+
   it('routes REACT event to authenticatedFetch via ReactionController', async () => {
     const { authenticatedFetch } = await import('../auth.js');
     const fetchMock = vi.mocked(authenticatedFetch);
