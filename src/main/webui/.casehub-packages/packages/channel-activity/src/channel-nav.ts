@@ -506,11 +506,11 @@ export class ChannelNavElement extends LitElement {
     `;
   }
 
-  private _renderSpaceGroup(node: SpaceNode): unknown {
+  private _renderSpaceGroup(node: SpaceNode, depth = 0): unknown {
     const expanded = this._expandedSpaces.has(node.space.id);
     const renaming = this._renamingSpaceId === node.space.id;
     return html`
-      <div class="space-group">
+      <div class="space-group" style="padding-left: ${depth * 12}px">
         <div class="space-header"
              data-space-id="${node.space.id}"
              @click="${renaming ? nothing : () => this._toggleSpace(node.space.id)}"
@@ -530,7 +530,7 @@ export class ChannelNavElement extends LitElement {
           <ul class="space-channels">
             ${node.channels.map(ch => this._renderChannelItem(ch))}
           </ul>
-          ${node.children.map(child => this._renderSpaceGroup(child))}
+          ${node.children.map(child => this._renderSpaceGroup(child, depth + 1))}
         ` : nothing}
       </div>
     `;

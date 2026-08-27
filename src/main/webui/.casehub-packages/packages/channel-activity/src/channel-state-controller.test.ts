@@ -799,6 +799,38 @@ describe('ChannelStateController', () => {
     });
   });
 
+  describe('multi-level nesting', () => {
+    it('rolls up unread counts from grandchild through child to root', () => {
+      const { push, ctrl } = createPair();
+      push.applyOp({
+        op: 'snapshot', dataset: 'spaces',
+        rows: [
+          spaceRow('sp-root', 'Root'),
+          spaceRow('sp-child', 'Child', { parentSpaceId: 'sp-root' }),
+          spaceRow('sp-grand', 'Grandchild', { parentSpaceId: 'sp-child' }),
+        ],
+      });
+      push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [
+          channelRow('ch-1', 'root-ch', { spaceId: 'sp-root', spaceName: 'Root', unreadCount: '1' }),
+          channelRow('ch-2', 'child-ch', { spaceId: 'sp-child', spaceName: 'Child', unreadCount: '2' }),
+          channelRow('ch-3', 'grand-ch', { spaceId: 'sp-grand', spaceName: 'Grandchild', unreadCount: '3' }),
+        ],
+      });
+      const tree = ctrl.channelTree;
+      expect(tree.spaces).toHaveLength(1);
+      const root = tree.spaces[0]!;
+      expect(root.children).toHaveLength(1);
+      const child = root.children[0]!;
+      expect(child.children).toHaveLength(1);
+      const grand = child.children[0]!;
+      expect(grand.unreadCount).toBe(3);
+      expect(child.unreadCount).toBe(5);
+      expect(root.unreadCount).toBe(6);
+    });
+  });
+
   describe('channel position', () => {
     it('parses position from row index 9', () => {
       const { push, ctrl } = createPair();

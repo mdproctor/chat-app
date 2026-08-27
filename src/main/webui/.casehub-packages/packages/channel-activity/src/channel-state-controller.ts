@@ -142,10 +142,15 @@ export class ChannelStateController implements ReactiveController {
       }
       roots.push({ ...node, unreadCount: channelUnread });
     }
-    for (const root of roots) {
-      const childrenUnread = root.children.reduce((sum, child) => sum + child.unreadCount, 0);
-      (root as { unreadCount: number }).unreadCount += childrenUnread;
-    }
+    const rollUpUnread = (node: SpaceNode): number => {
+      let total = node.channels.reduce((sum, ch) => sum + (ch.unreadCount ?? 0), 0);
+      for (const child of node.children) {
+        total += rollUpUnread(child);
+      }
+      (node as { unreadCount: number }).unreadCount = total;
+      return total;
+    };
+    for (const root of roots) { rollUpUnread(root); }
 
     return { spaces: roots, ungrouped };
   }
