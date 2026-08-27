@@ -552,8 +552,8 @@ export class ChannelNavElement extends LitElement {
       this._updateDragDropTarget(me.clientY, channel);
     };
     const onUp = () => {
-      this.removeEventListener('pointermove', onMove);
-      this.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
       document.removeEventListener('keydown', onEscape);
       if (this._dragHoldTimer) { clearTimeout(this._dragHoldTimer); this._dragHoldTimer = null; }
       if (this._dragActive && this._dragDropTarget) {
@@ -563,15 +563,15 @@ export class ChannelNavElement extends LitElement {
     };
     const onEscape = (ke: KeyboardEvent) => {
       if (ke.key === 'Escape') {
-        this.removeEventListener('pointermove', onMove);
-        this.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
         document.removeEventListener('keydown', onEscape);
         if (this._dragHoldTimer) { clearTimeout(this._dragHoldTimer); this._dragHoldTimer = null; }
         this._cleanupDrag();
       }
     };
-    this.addEventListener('pointermove', onMove);
-    this.addEventListener('pointerup', onUp);
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
     document.addEventListener('keydown', onEscape);
   }
 
