@@ -59,6 +59,9 @@ public class ChatResource {
     CurrentPrincipal           currentPrincipal;
     @Inject
     ObjectMapper               objectMapper;
+    @Inject
+    io.casehub.qhorus.runtime.channel.SpaceService spaceService;
+
 
     // --- Messages ---
 
@@ -171,6 +174,21 @@ public class ChatResource {
 
     // --- Private helpers ---
 
+
+    @PUT
+    @Path("/channels/{channelId}/space")
+    public Response moveChannelToSpace(@PathParam("channelId") String channelId,
+                                       MoveToSpaceRequest request) {
+        try {
+            var channelUuid = UUID.fromString(channelId);
+            var spaceUuid   = request.spaceId() != null ? UUID.fromString(request.spaceId()) : null;
+            var updated     = spaceService.moveChannelToSpace(channelUuid, spaceUuid);
+            return Response.ok(Map.of("ok", true, "channelId", updated.id().toString())).build();
+        } catch (IllegalArgumentException e) {
+            return Response.status(400).entity(Map.of("error", e.getMessage())).build();
+        }
+    }
+
     private void ensureMembership(UUID channelId, String memberId) {
         if (memberReader.find(channelId, memberId).isEmpty()) {
             var membership = members.join(channelId, memberId);
@@ -219,4 +237,7 @@ public class ChatResource {
                                      String topic, String topicId) {}
 
     public record MarkReadRequest(Long lastReadMessageId) {}
+
+    public record MoveToSpaceRequest(String spaceId) {}
+
 }

@@ -22,7 +22,7 @@ import {
   ChannelCorrelationPanelElement,
   renderMarkdown,
 } from '@casehubio/blocks-ui-channel-activity';
-import type { SendMessagePayload, ArtefactRef } from '@casehubio/blocks-ui-channel-activity';
+import type { SendMessagePayload, ArtefactRef, CreateSpacePayload, RenameSpacePayload, DeleteSpacePayload, MoveChannelToSpacePayload } from '@casehubio/blocks-ui-channel-activity';
 import type { DockItem, LayoutState } from '@casehubio/pages-component';
 import { createLocalLayoutStore } from '@casehubio/pages-runtime/layout-store.js';
 import { getToken, getIdentity, authenticatedFetch } from '../auth.js';
@@ -400,6 +400,36 @@ export class QhorusWorkbenchElement extends LitElement {
           body: JSON.stringify({ lastReadMessageId: latestId }),
         }).catch(() => {});
       }
+    }
+    if (topic === ChannelEventTopics.CREATE_SPACE) {
+      const { name } = payload as CreateSpacePayload;
+      authenticatedFetch('/api/spaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      }).catch(e => console.error('Create space failed:', e));
+    }
+    if (topic === ChannelEventTopics.RENAME_SPACE) {
+      const { spaceId, newName } = payload as RenameSpacePayload;
+      authenticatedFetch(`/api/spaces/${spaceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      }).catch(e => console.error('Rename space failed:', e));
+    }
+    if (topic === ChannelEventTopics.DELETE_SPACE) {
+      const { spaceId } = payload as DeleteSpacePayload;
+      authenticatedFetch(`/api/spaces/${spaceId}`, {
+        method: 'DELETE',
+      }).catch(e => console.error('Delete space failed:', e));
+    }
+    if (topic === ChannelEventTopics.MOVE_CHANNEL_TO_SPACE) {
+      const { channelId, spaceId } = payload as MoveChannelToSpacePayload;
+      authenticatedFetch(`/api/chat/channels/${channelId}/space`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spaceId }),
+      }).catch(e => console.error('Move channel failed:', e));
     }
   };
 
