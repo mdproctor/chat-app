@@ -424,11 +424,13 @@ export class QhorusWorkbenchElement extends LitElement {
       }).catch(e => console.error('Delete space failed:', e));
     }
     if (topic === ChannelEventTopics.MOVE_CHANNEL_TO_SPACE) {
-      const { channelId, spaceId } = payload as MoveChannelToSpacePayload;
+      const { channelId, spaceId, position } = payload as MoveChannelToSpacePayload;
+      const spaceNode = this._channels.channelTree.spaces.find(s => s.space.id === spaceId);
+      this._channels.applyMoveChannel(channelId, spaceId, spaceNode?.space.name ?? null, position);
       authenticatedFetch(`/api/chat/channels/${channelId}/space`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spaceId }),
+        body: JSON.stringify({ spaceId, position }),
       }).catch(e => console.error('Move channel failed:', e));
     }
   };

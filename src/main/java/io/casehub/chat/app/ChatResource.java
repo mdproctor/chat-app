@@ -182,7 +182,7 @@ public class ChatResource {
         try {
             var channelUuid = UUID.fromString(channelId);
             var spaceUuid   = request.spaceId() != null ? UUID.fromString(request.spaceId()) : null;
-            var updated     = spaceService.moveChannelToSpace(channelUuid, spaceUuid);
+            var updated     = spaceService.moveChannelToSpace(channelUuid, spaceUuid, request.position());
             return Response.ok(Map.of("ok", true, "channelId", updated.id().toString())).build();
         } catch (IllegalArgumentException e) {
             return Response.status(400).entity(Map.of("error", e.getMessage())).build();
@@ -238,6 +238,6 @@ public class ChatResource {
 
     public record MarkReadRequest(Long lastReadMessageId) {}
 
-    public record MoveToSpaceRequest(String spaceId) {}
+    public record MoveToSpaceRequest(String spaceId, Integer position) {}
 
 }
