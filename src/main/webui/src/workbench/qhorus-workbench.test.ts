@@ -626,6 +626,270 @@ describe('QhorusWorkbenchElement', () => {
     });
   });
 
+  describe('topic sidebar and message grouping (#18)', () => {
+    it('shows topic bar when channel has multiple topics', async () => {
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'general', '', '', 'false', '', '', '', '', '0']],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'topics',
+        rows: [
+          ['1', 'ch-1', 'Design', 'ACTIVE', '5', '2026-07-10T12:00:00Z', '2026-07-10T10:00:00Z'],
+          ['2', 'ch-1', 'Implementation', 'ACTIVE', '3', '2026-07-10T13:00:00Z', '2026-07-10T11:00:00Z'],
+        ],
+      });
+      element._channels.selectedChannelId = 'ch-1';
+      element.requestUpdate();
+      await element.updateComplete;
+
+      const topicBar = element.shadowRoot!.querySelector('blocks-channel-topic-bar');
+      expect(topicBar).toBeTruthy();
+      expect(topicBar.topics.length).toBe(2);
+    });
+
+    it('hides topic bar when channel has one or zero topics', async () => {
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'general', '', '', 'false', '', '', '', '', '0']],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'topics',
+        rows: [['1', 'ch-1', 'General', 'ACTIVE', '5', '', '2026-07-10T10:00:00Z']],
+      });
+      element._channels.selectedChannelId = 'ch-1';
+      element.requestUpdate();
+      await element.updateComplete;
+
+      const topicBar = element.shadowRoot!.querySelector('blocks-channel-topic-bar');
+      expect(topicBar).toBeNull();
+    });
+
+    it('filters messages by selected topic', async () => {
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'general', '', '', 'false', '', '', '', '', '0']],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'messages',
+        rows: [
+          ['ch-1', 'msg-1', null, 'alice', 'Design msg', '2026-07-10T12:00:00Z', 'EVENT', 'HUMAN', '1', null, '[]', null],
+          ['ch-1', 'msg-2', null, 'bob', 'Impl msg', '2026-07-10T12:01:00Z', 'EVENT', 'HUMAN', '2', null, '[]', null],
+        ],
+      });
+      element._channels.selectedChannelId = 'ch-1';
+      element._channels.selectedTopicId = '1';
+      element.requestUpdate();
+      await element.updateComplete;
+
+      const feed = element.shadowRoot!.querySelector('blocks-channel-feed');
+      expect(feed.messages.length).toBe(1);
+      expect(feed.messages[0].content).toBe('Design msg');
+    });
+
+    it('shows all messages when no topic selected', async () => {
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'general', '', '', 'false', '', '', '', '', '0']],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'messages',
+        rows: [
+          ['ch-1', 'msg-1', null, 'alice', 'Design msg', '2026-07-10T12:00:00Z', 'EVENT', 'HUMAN', '1', null, '[]', null],
+          ['ch-1', 'msg-2', null, 'bob', 'Impl msg', '2026-07-10T12:01:00Z', 'EVENT', 'HUMAN', '2', null, '[]', null],
+        ],
+      });
+      element._channels.selectedChannelId = 'ch-1';
+      element._channels.selectedTopicId = null;
+      element.requestUpdate();
+      await element.updateComplete;
+
+      const feed = element.shadowRoot!.querySelector('blocks-channel-feed');
+      expect(feed.messages.length).toBe(2);
+    });
+
+    it('selects topic via SELECT_TOPIC event', async () => {
+      const event = new CustomEvent('pages-event', {
+        detail: {
+          topic: ChannelEventTopics.SELECT_TOPIC,
+          payload: { channelId: 'ch-1', topicId: '1' },
+        },
+        bubbles: true, composed: true,
+      });
+      element.dispatchEvent(event);
+      await element.updateComplete;
+
+      expect(element._channels.selectedTopicId).toBe('1');
+    });
+
+    it('changes view mode via VIEW_MODE event', async () => {
+      expect(element._channels.viewMode).toBe('flat');
+
+      const event = new CustomEvent('pages-event', {
+        detail: {
+          topic: ChannelEventTopics.VIEW_MODE,
+          payload: { mode: 'topics' },
+        },
+        bubbles: true, composed: true,
+      });
+      element.dispatchEvent(event);
+      await element.updateComplete;
+
+      expect(element._channels.viewMode).toBe('topics');
+    });
+
+    it('passes viewMode to feed and topic bar', async () => {
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'general', '', '', 'false', '', '', '', '', '0']],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'topics',
+        rows: [
+          ['1', 'ch-1', 'Design', 'ACTIVE', '5', '', '2026-07-10T10:00:00Z'],
+          ['2', 'ch-1', 'Impl', 'ACTIVE', '3', '', '2026-07-10T11:00:00Z'],
+        ],
+      });
+      element._channels.selectedChannelId = 'ch-1';
+      element._channels.viewMode = 'topics';
+      element.requestUpdate();
+      await element.updateComplete;
+
+      const topicBar = element.shadowRoot!.querySelector('blocks-channel-topic-bar');
+      const feed = element.shadowRoot!.querySelector('blocks-channel-feed');
+      expect(topicBar.viewMode).toBe('topics');
+      expect(feed.viewMode).toBe('topics');
+    });
+
+    it('passes topics to feed for message grouping', async () => {
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'general', '', '', 'false', '', '', '', '', '0']],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'topics',
+        rows: [
+          ['1', 'ch-1', 'Design', 'ACTIVE', '5', '', '2026-07-10T10:00:00Z'],
+          ['2', 'ch-1', 'Impl', 'RESOLVED', '3', '', '2026-07-10T11:00:00Z'],
+        ],
+      });
+      element._channels.selectedChannelId = 'ch-1';
+      element.requestUpdate();
+      await element.updateComplete;
+
+      const feed = element.shadowRoot!.querySelector('blocks-channel-feed');
+      expect(feed.topics.length).toBe(2);
+      expect(feed.topics.find((t: any) => t.name === 'Design').state).toBe('ACTIVE');
+      expect(feed.topics.find((t: any) => t.name === 'Impl').state).toBe('RESOLVED');
+    });
+
+    it('excludes MERGED topics from topic list', async () => {
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'general', '', '', 'false', '', '', '', '', '0']],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'topics',
+        rows: [
+          ['1', 'ch-1', 'Active', 'ACTIVE', '5', '', '2026-07-10T10:00:00Z'],
+          ['2', 'ch-1', 'Merged', 'MERGED', '3', '', '2026-07-10T11:00:00Z'],
+          ['3', 'ch-1', 'Resolved', 'RESOLVED', '1', '', '2026-07-10T12:00:00Z'],
+        ],
+      });
+      element._channels.selectedChannelId = 'ch-1';
+      element.requestUpdate();
+      await element.updateComplete;
+
+      const topics = element._channels.channelTopics();
+      expect(topics.length).toBe(2);
+      expect(topics.find((t: any) => t.name === 'Merged')).toBeUndefined();
+    });
+  });
+
+  describe('reaction rendering (#18)', () => {
+    it('multiple reactions on same message from different actors', async () => {
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'general', '', '', 'false', '', '', '', '', '0']],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'messages',
+        rows: [['ch-1', 'msg-1', null, 'alice', 'Hello', '2026-07-07T12:00:00Z', 'EVENT', 'HUMAN', '', null, '[]', null]],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'reactions',
+        rows: [['msg-1', '👍'], ['msg-1', '👍'], ['msg-1', '❤️']],
+      });
+      element._channels.selectedChannelId = 'ch-1';
+      element.requestUpdate();
+      await element.updateComplete;
+
+      const feed = element.shadowRoot!.querySelector('blocks-channel-feed');
+      const reactions = feed.reactions as Reaction[];
+      const thumbs = reactions.filter((r: any) => r.emoji === '👍');
+      const hearts = reactions.filter((r: any) => r.emoji === '❤️');
+      expect(thumbs.length).toBe(2);
+      expect(hearts.length).toBe(1);
+    });
+
+    it('push append updates reactions live', async () => {
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'general', '', '', 'false', '', '', '', '', '0']],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'messages',
+        rows: [['ch-1', 'msg-1', null, 'alice', 'Hello', '2026-07-07T12:00:00Z', 'EVENT', 'HUMAN', '', null, '[]', null]],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'reactions',
+        rows: [['msg-1', '👍']],
+      });
+      element._channels.selectedChannelId = 'ch-1';
+      element.requestUpdate();
+      await element.updateComplete;
+
+      let feed = element.shadowRoot!.querySelector('blocks-channel-feed');
+      expect((feed.reactions as Reaction[]).length).toBe(1);
+
+      element._push.applyOp({
+        op: 'append', dataset: 'reactions',
+        rows: [['msg-1', '❤️']],
+      });
+      element.requestUpdate();
+      await element.updateComplete;
+
+      feed = element.shadowRoot!.querySelector('blocks-channel-feed');
+      expect((feed.reactions as Reaction[]).length).toBe(2);
+    });
+
+    it('multiple emojis on same message produce separate reaction entries', async () => {
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'channels',
+        rows: [['ch-1', 'general', '', '', 'false', '', '', '', '', '0']],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'messages',
+        rows: [['ch-1', 'msg-1', null, 'alice', 'Hello', '2026-07-07T12:00:00Z', 'EVENT', 'HUMAN', '', null, '[]', null]],
+      });
+      element._push.applyOp({
+        op: 'snapshot', dataset: 'reactions',
+        rows: [['msg-1', '👍'], ['msg-1', '🎉'], ['msg-1', '🔥']],
+      });
+      element._channels.selectedChannelId = 'ch-1';
+      element.requestUpdate();
+      await element.updateComplete;
+
+      const feed = element.shadowRoot!.querySelector('blocks-channel-feed');
+      const reactions = feed.reactions as Reaction[];
+      const emojis = new Set(reactions.map((r: any) => r.emoji));
+      expect(emojis.size).toBe(3);
+      expect(emojis).toContain('👍');
+      expect(emojis).toContain('🎉');
+      expect(emojis).toContain('🔥');
+    });
+  });
+
   describe('layout structure', () => {
     it('blocks-channel-feed fills available space in main panel', async () => {
       const el = await renderWorkbench();
