@@ -38,8 +38,29 @@ A new `ChannelMoved` event on the `ChannelMutationEvent` sealed interface, obser
 
 Issue #38 reported that `mvn install` in a slot clone destroyed sibling directories. The hypothesis was a Maven clean plugin with `filesets` referencing `..` paths. Investigation found no such configuration in any POM in the build chain. The default clean plugin only deletes `target/`. The actual destruction mechanism remains unclear — possibly a transient Yarn Berry workspace integrity issue. The parent issue was closed; the soredium durability fix (push after every commit in slots) stands on its own merits.
 
+## Topic and reaction tests (#18)
+
+The last issue in the queue was pure test coverage — verifying that topics and reactions flow correctly from the push layer through the workbench to the UI components. Ten tests across two areas:
+
+**Topics:** topic bar visibility based on count, message filtering by selected topic, `SELECT_TOPIC` and `VIEW_MODE` event routing, viewMode propagation to both the feed and topic bar, topic data passed to the feed for grouping (including resolved-state visibility), and MERGED topic exclusion from the topic list.
+
+**Reactions:** multiple reactions on the same message (same emoji from different actors), push `append` ops updating reactions live, and multiple distinct emojis rendering as separate entries.
+
+The tests follow the workbench's existing pattern — inject push data via `_push.applyOp`, set controller state, then assert component properties. They're structurally correct but currently blocked by a pre-existing broken import in blocks-ui-core (`status-badge` deleted but still referenced in `commitment-state-pill.ts`). The import breaks vitest module resolution for the entire workbench test file.
+
+## Work-end: two soredium bugs
+
+The branch close process surfaced two bugs in the work-end tooling.
+
+The first: `_preflight_two_hop` in `land_flow.py` runs `git status --porcelain` on the original repo before landing, and treats *any* output as a dirty worktree. That includes untracked files — in this case, a dozen screenshot PNGs left over from a previous session in the blocks-ui repo. Untracked files don't interfere with merge or rebase. The fix was one line: filter `??` lines before checking. Filed as soredium#319, fixed same day.
+
+The second: the landing step merges feature branch content into the original repo's local `main` but doesn't always push to `origin`. The archive verification step then fetches `origin/main` and checks ancestry — which fails because the commits haven't been pushed. The verification should check local `main`, not `origin/main`. Push to GitHub is the upstream PR step's concern, not the archive verifier's. Filed as soredium#322.
+
 ## What shipped
 
 - **qhorus**: `displayOrder` on Channel, positional `moveChannelToSpace`, `ChannelMoved` event, push broadcast infrastructure
 - **blocks-ui**: HTML5 drag-and-drop in `channel-nav.ts` with positional drops, drop indicators, space header highlighting, empty ungrouped drop zone
 - **chat-app**: REST endpoint with position, workbench optimistic update, 10 integration tests for topic sidebar and reaction rendering (#18)
+- **soredium**: two work-end bugs found and reported (#319 fixed, #322 filed)
+
+<!-- TODO: add screenshots of D&D feature — needs working frontend dev environment (Vite source-tree resolution currently broken) -->
