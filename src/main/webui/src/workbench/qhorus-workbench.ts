@@ -27,7 +27,7 @@ import type { DockItem, LayoutState } from '@casehubio/pages-component';
 import { createLocalLayoutStore } from '@casehubio/pages-runtime/layout-store.js';
 import { getToken, getIdentity, authenticatedFetch } from '../auth.js';
 import { applyTheme } from '@casehubio/pages-ui-tokens';
-import { stateCategoryStyles } from '@casehubio/blocks-ui-core';
+import { stateCategoryStyles } from '@casehubio/pages-ui-components';
 import { ARTEFACT_SELECTED } from '../types.js';
 import { decorateCommitmentRanges } from '@casehubio/blocks-ui-commitment-viz/dist/range-decorator.js';
 import type { RangeDecoration } from '@casehubio/blocks-ui-commitment-viz/dist/types.js';

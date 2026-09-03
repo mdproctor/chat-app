@@ -63,4 +63,4 @@ The second: the landing step merges feature branch content into the original rep
 - **chat-app**: REST endpoint with position, workbench optimistic update, 10 integration tests for topic sidebar and reaction rendering (#18)
 - **soredium**: two work-end bugs found and reported (#319 fixed, #322 filed)
 
-<!-- TODO: add screenshots of D&D feature — needs working frontend dev environment (Vite source-tree resolution currently broken) -->
+![Chat workbench with spaces and channels](chat-app-workbench.png)

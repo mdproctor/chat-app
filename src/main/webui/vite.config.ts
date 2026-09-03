@@ -13,8 +13,8 @@ const aliases: { find: string | RegExp; replacement: string }[] = [];
 
 if (pagesExists) {
   for (const pkg of ['pages-primitives', 'pages-ui-tokens', 'pages-component', 'pages-data', 'pages-runtime', 'pages-ui', 'pages-viz']) {
-    aliases.push({ find: `@casehubio/${pkg}`, replacement: path.resolve(PAGES, `${pkg}/src`) });
     aliases.push({ find: `@casehubio/${pkg}/dist`, replacement: path.resolve(PAGES, `${pkg}/src`) });
+    aliases.push({ find: `@casehubio/${pkg}`, replacement: path.resolve(PAGES, `${pkg}/src`) });
   }
 }
 
