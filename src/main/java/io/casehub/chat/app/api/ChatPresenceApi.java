@@ -14,7 +14,7 @@ import jakarta.inject.Inject;
 
 import java.util.Map;
 
-@McpDomain(value = "chat/presence", app = "chat-app", basePath = "/api/chat/presence")
+@McpDomain(value = "chat/presence", app = "chat-app", basePath = "/api/chat/presence", summary = "Get presence status for a member; Set presence status for a member")
 @ApplicationScoped
 public class ChatPresenceApi {
 

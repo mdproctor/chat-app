@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-@McpDomain(value = "chat/messages", app = "chat-app", basePath = "/api/chat/messages")
+@McpDomain(value = "chat/messages", app = "chat-app", basePath = "/api/chat/messages", summary = "Messages — list, mark, move operations")
 @ApplicationScoped
 public class ChatMessageApi {
 
