@@ -168,7 +168,7 @@ Each payload is a JSON object:
 | `casehub-platform-api` | `CurrentPrincipal`, `ActorType` |
 | `casehub-pages-auth` | JWT dev-auth (`/dev/auth/login` endpoint), SmallRye JWT integration |
 | `casehub-pages-npm` | pages-runtime, pages-ui, pages-ui-tokens, pages-component, pages-data (Maven SNAPSHOT WebJar) |
-| `casehub-agency-ui-npm` | channel-activity components (feed, nav, member panel, input, topic bar), commitment-viz (range-bar, state-pill), blocks-ui-core (Maven SNAPSHOT WebJar) |
+| `casehub-blocks-ui-npm` | channel-activity components (feed, nav, member panel, input, topic bar), commitment-viz (range-bar, state-pill), blocks-ui-core (Maven SNAPSHOT WebJar) |
 
 ### Frontend Package Dependencies
 
@@ -231,7 +231,7 @@ The app is accessible at `http://localhost:8090`. The login overlay prompts for 
 
 - Does not define the qhorus Channel/Message/Topic SPIs -- those are in `casehub-qhorus-api`
 - Does not provide the qhorus runtime persistence -- that is `casehub-qhorus` (H2/JPA/Flyway)
-- Does not provide reusable UI components -- those are in `casehub-agency-ui` (channel-activity, commitment-viz)
+- Does not provide reusable UI components -- those are in `casehub-blocks-ui` (channel-activity, commitment-viz)
 - Does not provide production-grade persistence -- H2 in-memory is dev/demo only
 - Does not send outbound messages to external platforms -- that is the connectors' job
 - Does not implement the pages runtime or UI framework -- those are in `casehub-pages`
