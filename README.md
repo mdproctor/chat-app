@@ -31,4 +31,4 @@ cd src/main/webui && npx vitest run
 
 - `casehub-connectors` — chat-spi, chat-ref, connectors-core
 - `casehub-pages` — pages-auth, pages-runtime, pages-ui
-- `casehub-blocks-ui` — channel-activity components
+- `casehub-mosaic` — channel-activity components
